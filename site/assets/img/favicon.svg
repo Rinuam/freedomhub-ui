@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="ir" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#67e8f9"/>
+      <stop offset=".35" stop-color="#a78bfa"/>
+      <stop offset=".7" stop-color="#f0a1c8"/>
+      <stop offset="1" stop-color="#fcd9a0"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx=".35" cy=".3" r=".95">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".55" stop-color="#e7e9ee"/>
+      <stop offset="1" stop-color="#c6c9d1"/>
+    </radialGradient>
+    <linearGradient id="film" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#67e8f9" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="#a78bfa" stop-opacity=".4"/>
+      <stop offset="1" stop-color="#f0a1c8" stop-opacity=".5"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="29" fill="url(#sheen)"/>
+  <path d="M6 44 A29 29 0 0 0 58 44 A44 44 0 0 0 6 44 Z" fill="url(#film)"/>
+  <circle cx="32" cy="32" r="29" fill="none" stroke="url(#ir)" stroke-width="2.5"/>
+</svg>

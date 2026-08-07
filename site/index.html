@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thin Film Engineer — Learn deposition and etch the way fabs need it</title>
+  <meta name="description" content="Thin film deposition, plasma etch, metrology and process statistics — taught the way fabs actually need them. Get the free semiconductor process interview pack.">
+  <link rel="canonical" href="https://thinfilmengineer.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://thinfilmengineer.com/">
+  <meta property="og:site_name" content="Thin Film Engineer">
+  <meta property="og:title" content="Thin Film Engineer — Learn deposition and etch the way fabs need it">
+  <meta property="og:description" content="Thin film deposition, plasma etch, metrology and process statistics — taught the way fabs actually need them. Get the free semiconductor process interview pack.">
+  <meta property="og:image" content="https://thinfilmengineer.com/assets/img/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Thin Film Engineer — Learn deposition and etch the way fabs need it">
+  <meta name="twitter:description" content="Thin film deposition, plasma etch, metrology and process statistics — taught the way fabs actually need them.">
+  <meta name="twitter:image" content="https://thinfilmengineer.com/assets/img/og.jpg">
+  <meta name="theme-color" content="#F7F5F1">
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+  <link rel="preload" href="assets/fonts/fraunces-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/main.css">
+  <script>
+    /* ================================================================
+       WEB3FORMS ACCESS KEY — paste your key between the quotes below.
+       Get one free at https://web3forms.com (takes one minute).
+       While the placeholder is unchanged the form runs in demo mode:
+       it validates and shows success without sending anything.
+       ================================================================ */
+    window.W3F_KEY = 'PASTE-YOUR-ACCESS-KEY-HERE';
+    document.documentElement.classList.add('js');
+  </script>
+</head>
+<body>
+
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- ── 0 · NAV ─────────────────────────────────────────────── -->
+  <header class="nav" id="nav">
+    <a class="nav-brand" href="#top">Thin&nbsp;Film&nbsp;Engineer</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#craft">The Craft</a>
+      <a href="#numbers">The Numbers</a>
+      <a href="#curriculum">Curriculum</a>
+      <a href="#careers">Careers</a>
+      <a class="btn btn-nav" href="#signup">Free Pack</a>
+    </nav>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+        <path class="bar-1" d="M2 6.5h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path class="bar-2" d="M2 15.5h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </header>
+  <div class="mobile-menu" id="mobile-menu" hidden>
+    <nav aria-label="Mobile">
+      <a href="#craft">The Craft</a>
+      <a href="#numbers">The Numbers</a>
+      <a href="#curriculum">Curriculum</a>
+      <a href="#careers">Careers</a>
+      <a class="btn btn-primary" href="#signup">Get the free pack</a>
+    </nav>
+  </div>
+
+  <canvas id="gl" aria-hidden="true"></canvas>
+
+  <main id="main">
+
+    <!-- ── 1 · HERO — one wafer ─────────────────────────────── -->
+    <section class="hero" id="top" aria-label="Introduction">
+      <div class="hero-media" aria-hidden="true">
+        <img class="poster poster-hero" src="assets/img/poster-wafer.webp" width="1200" height="900"
+             alt="" loading="eager" fetchpriority="low" decoding="async">
+      </div>
+      <div class="hero-copy">
+        <p class="kicker reveal">Semiconductor process engineering</p>
+        <h1 class="hero-h">
+          <span class="line"><span class="line-in">Everything a chip is,</span></span>
+          <span class="line"><span class="line-in">begins as a film.</span></span>
+        </h1>
+        <p class="hero-sub reveal">Thin film deposition, plasma etch, metrology and process statistics —
+          taught the way fabs actually need them, by an engineer who runs them.</p>
+        <div class="hero-cta reveal">
+          <a class="btn btn-primary" href="#signup">Get the free interview pack</a>
+          <a class="btn btn-ghost" href="#craft">Read the craft</a>
+        </div>
+      </div>
+      <div class="scroll-cue" aria-hidden="true">
+        <span class="scroll-cue-label">Scroll</span>
+        <span class="scroll-cue-line"></span>
+      </div>
+    </section>
+
+    <!-- ── 2 · CHAPTER I — THE CRAFT ────────────────────────── -->
+    <section class="craft section-dark" id="craft" aria-label="Chapter one — the craft">
+      <div class="chapter-head container">
+        <p class="kicker kicker-ir reveal">Chapter I · The Craft</p>
+        <h2 class="chapter-title">
+          <span class="line"><span class="line-in">Inside the chamber.</span></span>
+        </h2>
+        <p class="chapter-lede reveal">Four disciplines, one loop. This is the work,
+          in the order the wafer sees it.</p>
+      </div>
+
+      <div class="craft-pin">
+        <div class="craft-track">
+
+          <article class="craft-scene is-active" data-scene="deposit" data-index="0">
+            <div class="scene-media" aria-hidden="true">
+              <img class="poster" src="assets/img/poster-deposit.webp" width="1080" height="810" alt="" loading="lazy" decoding="async">
+            </div>
+            <div class="scene-copy">
+              <p class="scene-numeral" aria-hidden="true">I</p>
+              <p class="scene-step kicker">Deposit</p>
+              <h3 class="scene-h">First, you build.</h3>
+              <p class="scene-p">Atom by atom, layer by layer. Sputtered, evaporated, or grown one
+                atomic layer per cycle — thickness, stress, uniformity and step coverage are all
+                decided in seconds.</p>
+              <p class="scene-readout">PVD · ALD · CVD — GROWTH ~1 Å PER ALD CYCLE</p>
+            </div>
+          </article>
+
+          <article class="craft-scene" data-scene="etch" data-index="1">
+            <div class="scene-media" aria-hidden="true">
+              <img class="poster" src="assets/img/poster-etch.webp" width="1080" height="810" alt="" loading="lazy" decoding="async">
+            </div>
+            <div class="scene-copy">
+              <p class="scene-numeral" aria-hidden="true">II</p>
+              <p class="scene-step kicker">Remove</p>
+              <h3 class="scene-h">Then, you carve.</h3>
+              <p class="scene-p">Ions accelerate across the plasma sheath and cut vertical trenches
+                through the stack. Seven knobs decide whether the profile is straight or ruined.</p>
+              <p class="scene-readout">RIE · ICP-RIE · ALE — ANISOTROPIC PROFILES</p>
+            </div>
+          </article>
+
+          <article class="craft-scene" data-scene="metrology" data-index="2">
+            <div class="scene-media" aria-hidden="true">
+              <img class="poster" src="assets/img/poster-metrology.webp" width="1080" height="810" alt="" loading="lazy" decoding="async">
+            </div>
+            <div class="scene-copy">
+              <p class="scene-numeral" aria-hidden="true">III</p>
+              <p class="scene-step kicker">Prove</p>
+              <h3 class="scene-h">Then, you prove it.</h3>
+              <p class="scene-p">Ellipsometry, XRR, AFM, SEM. Measuring what you made — and knowing
+                when the measurement, not the process, is what&rsquo;s wrong.</p>
+              <p class="scene-readout">THICKNESS 42.3 NM · UNIFORMITY ±1.8%</p>
+            </div>
+          </article>
+
+          <article class="craft-scene" data-scene="stack" data-index="3">
+            <div class="scene-media" aria-hidden="true">
+              <img class="poster" src="assets/img/poster-stack.webp" width="1080" height="810" alt="" loading="lazy" decoding="async">
+            </div>
+            <div class="scene-copy">
+              <p class="scene-numeral" aria-hidden="true">IV</p>
+              <p class="scene-step kicker">Repeat</p>
+              <h3 class="scene-h">Sixty times over.</h3>
+              <p class="scene-p">A modern chip stacks and etches films dozens upon dozens of times.
+                Someone has to know how every one of those layers behaves.</p>
+              <p class="scene-readout">DEPOSIT · ETCH · PROVE — AGAIN, AND AGAIN</p>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 3 · CHAPTER II — THE NUMBERS ─────────────────────── -->
+    <section class="numbers" id="numbers" aria-label="Chapter two — the numbers">
+      <div class="container">
+        <div class="chapter-head">
+          <p class="kicker kicker-ir reveal">Chapter II · The Numbers</p>
+          <h2 class="chapter-title">
+            <span class="line"><span class="line-in">The industry is short</span></span>
+            <span class="line"><span class="line-in">of people, not money.</span></span>
+          </h2>
+        </div>
+
+        <div class="stat-row" role="list">
+          <div class="stat reveal" role="listitem">
+            <p class="stat-value"><span class="count" data-count="1.5" data-decimals="1" data-prefix="$" data-suffix="T">$1.5T</span></p>
+            <p class="stat-label">Projected 2026 global semiconductor revenue — WSTS Spring 2026
+              forecast: $1.51T, ~90% growth over 2025, driven by AI and memory</p>
+          </div>
+          <div class="stat reveal" role="listitem">
+            <p class="stat-value"><span class="count" data-count="1.9" data-decimals="1" data-prefix="$" data-suffix="T">$1.9T</span></p>
+            <p class="stat-label">WSTS forecast for 2027</p>
+          </div>
+          <div class="stat reveal" role="listitem">
+            <p class="stat-value"><span class="count" data-count="1" data-suffix="M+">1M+</span></p>
+            <p class="stat-label">Additional skilled workers the industry needs by 2030 — SEMI&nbsp;/&nbsp;Deloitte</p>
+          </div>
+          <div class="stat reveal" role="listitem">
+            <p class="stat-value">1&nbsp;in&nbsp;3</p>
+            <p class="stat-label">Share of the US semiconductor workforce aged 55 or older — SEMI</p>
+          </div>
+        </div>
+
+        <!-- Chart A -->
+        <figure class="spread reveal">
+          <figcaption class="spread-head">
+            <p class="kicker">Chart A · WSTS forecast for 2026</p>
+            <h3 class="spread-h">The forecasts kept being wrong&nbsp;— upward.</h3>
+          </figcaption>
+          <div class="chart chart-a" role="img"
+               aria-label="Bar chart. The WSTS forecast for 2026 global semiconductor revenue was 975 billion dollars in December 2025, and was revised to 1.51 trillion dollars by June 2026.">
+            <div class="bar-row">
+              <span class="bar-label">Forecast, Dec&nbsp;2025</span>
+              <div class="bar-track"><div class="bar bar-grey" data-w="64.6" style="--w:64.6"></div></div>
+              <span class="bar-value">$975B</span>
+            </div>
+            <div class="bar-row">
+              <span class="bar-label">Revised, June&nbsp;2026</span>
+              <div class="bar-track"><div class="bar bar-ir" data-w="100" style="--w:100"></div></div>
+              <span class="bar-value">$1.51T</span>
+            </div>
+          </div>
+          <p class="spread-caption">In six months the industry&rsquo;s own forecast for itself grew by
+            half a trillion dollars.</p>
+        </figure>
+
+        <!-- Chart B -->
+        <figure class="spread reveal">
+          <figcaption class="spread-head">
+            <p class="kicker">Chart B · Workforce by region</p>
+            <h3 class="spread-h">Where the people are.</h3>
+          </figcaption>
+          <div class="chart chart-b" role="img"
+               aria-label="Bar chart of semiconductor workforce by region, Kelly Services industry estimate: Asia about 1.2 million, North America about 300 thousand, Europe about 200 thousand. By 2030, SEMI projects engineer shortfalls of more than 100 thousand in Europe and more than 200 thousand in Asia-Pacific.">
+            <div class="bar-row">
+              <span class="bar-label">Asia</span>
+              <div class="bar-track"><div class="bar bar-ir" data-w="100" style="--w:100"></div></div>
+              <span class="bar-value">~1.2M</span>
+            </div>
+            <div class="bar-row">
+              <span class="bar-label">North&nbsp;America</span>
+              <div class="bar-track"><div class="bar bar-grey" data-w="25" style="--w:25"></div></div>
+              <span class="bar-value">~300K</span>
+            </div>
+            <div class="bar-row">
+              <span class="bar-label">Europe</span>
+              <div class="bar-track"><div class="bar bar-grey" data-w="16.7" style="--w:16.7"></div></div>
+              <span class="bar-value">~200K</span>
+            </div>
+          </div>
+          <div class="chip-row">
+            <span class="chip chip-ir">Shortfall by 2030 · Europe &gt;100K engineers</span>
+            <span class="chip chip-ir">Shortfall by 2030 · Asia-Pacific &gt;200K</span>
+          </div>
+          <p class="spread-note">Workforce: Kelly Services industry estimate · Shortfalls: SEMI</p>
+        </figure>
+
+        <!-- Chart C -->
+        <figure class="spread reveal">
+          <figcaption class="spread-head">
+            <p class="kicker">Chart C · Deposition equipment market</p>
+            <h3 class="spread-h">The tools this page teaches are a market of their own.</h3>
+          </figcaption>
+          <div class="chart chart-c" role="img"
+               aria-label="Growth chart. Thin-film deposition equipment is an estimated 18.7 billion dollar market in 2026, growing to about 40 billion dollars by 2035, per MarkWide. ALD equipment alone is roughly 5 to 10 billion dollars in 2026 depending on scope, per GMI and Fortune Business Insights.">
+            <div class="growth">
+              <div class="growth-col">
+                <div class="growth-bar" data-h="47" style="--h:47%"><span class="growth-value">$18.7B</span></div>
+                <span class="growth-label">2026</span>
+              </div>
+              <div class="growth-arrow" aria-hidden="true">
+                <svg viewBox="0 0 120 40" fill="none" preserveAspectRatio="none">
+                  <path class="growth-path" pathLength="1" d="M4 34 C 40 32, 80 20, 116 6" stroke="url(#irGrad)" stroke-width="2" stroke-linecap="round"/>
+                  <defs>
+                    <linearGradient id="irGrad" x1="0" y1="1" x2="1" y2="0">
+                      <stop offset="0" stop-color="#5ec9e8"/>
+                      <stop offset=".5" stop-color="#9d8bf5"/>
+                      <stop offset="1" stop-color="#e79ac2"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <div class="growth-col">
+                <div class="growth-bar growth-bar-ir" data-h="100" style="--h:100%"><span class="growth-value">~$40B</span></div>
+                <span class="growth-label">2035</span>
+              </div>
+            </div>
+          </div>
+          <div class="chip-row">
+            <span class="chip">ALD equipment alone ≈ $5–10B in 2026, depending on scope · GMI&nbsp;/&nbsp;Fortune&nbsp;BI</span>
+          </div>
+          <p class="spread-caption">Every one of those machines needs an engineer who understands
+            what happens inside it.</p>
+          <p class="spread-note">Thin-film deposition equipment ≈ $18.7B in 2026 → ~$40B by 2035 · MarkWide</p>
+        </figure>
+
+        <!-- Salary band -->
+        <figure class="spread reveal">
+          <figcaption class="spread-head">
+            <p class="kicker">Salary band · United States</p>
+            <h3 class="spread-h">What the work pays.</h3>
+          </figcaption>
+          <div class="chart chart-salary" role="img"
+               aria-label="Salary range chart for US semiconductor process engineers. Typical total pay band roughly 143 to 238 thousand dollars with a median around 183 thousand, per Glassdoor 2026. Entry-level base figures are around 79 to 85 thousand dollars, per PayScale.">
+            <div class="salary-scale" aria-hidden="true">
+              <div class="salary-axis"></div>
+              <div class="salary-entry" style="--from:30.4%;--to:32.7%">
+                <span class="salary-tag">Entry base $79–85K <em>· PayScale</em></span>
+              </div>
+              <div class="salary-band" style="--from:55%;--to:91.5%">
+                <span class="salary-tag salary-tag-lo">$143K</span>
+                <span class="salary-tag salary-tag-hi">$238K</span>
+              </div>
+              <div class="salary-median" style="--at:70.4%">
+                <span class="salary-tag">Median ≈ $183K <em>· Glassdoor 2026, total pay</em></span>
+              </div>
+            </div>
+          </div>
+          <p class="spread-caption">Sources measure differently — base salary versus total
+            compensation — and region changes everything. The direction is what matters: this skill
+            set is scarce and it is paid accordingly.</p>
+        </figure>
+
+        <p class="fine-print reveal">Figures from WSTS, SEMI, Deloitte, Gartner, IDC, Glassdoor,
+          PayScale and published market research, mid-2026. Forecasts vary between sources; treat
+          all forward numbers as estimates.</p>
+      </div>
+    </section>
+
+    <!-- ── 4 · CHAPTER III — THE GAP ────────────────────────── -->
+    <section class="gap" id="gap" aria-label="Chapter three — the gap">
+      <div class="container">
+        <div class="chapter-head">
+          <p class="kicker kicker-ir reveal">Chapter III · The Gap</p>
+          <h2 class="chapter-title">
+            <span class="line"><span class="line-in">What school asks.</span></span>
+            <span class="line"><span class="line-in">What the fab asks.</span></span>
+          </h2>
+        </div>
+
+        <div class="gap-grid">
+          <div class="gap-col gap-classroom reveal">
+            <h3 class="gap-col-h kicker">In the classroom</h3>
+            <ul class="gap-list">
+              <li>Derive the Arrhenius expression</li>
+              <li>State the mean free path equation</li>
+              <li>Define anisotropy and selectivity</li>
+              <li>Calculate sputtering yield</li>
+              <li>Describe a normal distribution</li>
+            </ul>
+          </div>
+          <div class="gap-col gap-fab reveal">
+            <h3 class="gap-col-h kicker kicker-ir">On the fab floor</h3>
+            <ul class="gap-list gap-list-fab">
+              <li>Your film is 8% thicker at the wafer edge — why, and what do you change first?</li>
+              <li>Base pressure won&rsquo;t recover after a chamber open — where do you look?</li>
+              <li>The trench is undercut and sloped — which knob, which direction?</li>
+              <li>Etch rate dropped 20% overnight with no recipe change — diagnose it.</li>
+              <li>Cpk is 1.02 — explain to management what that means.</li>
+            </ul>
+          </div>
+        </div>
+
+        <p class="gap-closing reveal"><em>Both columns are real. Only one of them gets you hired,
+          keeps the line running, and gets you promoted.</em></p>
+      </div>
+    </section>
+
+    <!-- ── 5 · CHAPTER IV — THE CURRICULUM ──────────────────── -->
+    <section class="curriculum" id="curriculum" aria-label="Chapter four — the curriculum">
+      <div class="container">
+        <div class="chapter-head">
+          <p class="kicker kicker-ir reveal">Chapter IV · The Curriculum</p>
+          <h2 class="chapter-title">
+            <span class="line"><span class="line-in">Six rooms,</span></span>
+            <span class="line"><span class="line-in">one discipline.</span></span>
+          </h2>
+        </div>
+
+        <div class="card-grid">
+          <article class="card reveal">
+            <p class="card-num" aria-hidden="true">01</p>
+            <h3 class="card-h">Deposition</h3>
+            <p class="card-p">Building films you can trust — from sputtered metals and PECVD
+              Si₃N₄ to Al₂O₃ grown one atomic layer per cycle.</p>
+            <p class="card-tags">SPUTTERING · EVAPORATION · ALD · PEALD · CVD · PECVD · MOCVD</p>
+          </article>
+          <article class="card reveal">
+            <p class="card-num" aria-hidden="true">02</p>
+            <h3 class="card-h">Plasma etch</h3>
+            <p class="card-p">Cutting the pattern without ruining it — how chemistry like SF₆,
+              bias and pressure set the profile you actually get.</p>
+            <p class="card-tags">RIE · ICP-RIE · DRIE · ALE · SELECTIVITY · PROFILES</p>
+          </article>
+          <article class="card reveal">
+            <p class="card-num" aria-hidden="true">03</p>
+            <h3 class="card-h">Plasma &amp; vacuum</h3>
+            <p class="card-p">The physics under every recipe — what the sheath does to ions, and
+              why base pressure tells you the truth.</p>
+            <p class="card-tags">SHEATHS · ION ENERGY · PUMPING · LEAKS</p>
+          </article>
+          <article class="card reveal">
+            <p class="card-num" aria-hidden="true">04</p>
+            <h3 class="card-h">Metrology</h3>
+            <p class="card-p">Knowing what you made — from native SiO₂ to full stacks — and
+              knowing when to doubt the measurement itself.</p>
+            <p class="card-tags">ELLIPSOMETRY · XRR · XRD · AFM · SEM · STRESS</p>
+          </article>
+          <article class="card reveal">
+            <p class="card-num" aria-hidden="true">05</p>
+            <h3 class="card-h">Process statistics</h3>
+            <p class="card-p">The language management speaks — control charts, designed
+              experiments, and what capability really claims.</p>
+            <p class="card-tags">SPC · DOE · CP/CPK · GAUGE R&amp;R</p>
+          </article>
+          <article class="card reveal">
+            <p class="card-num" aria-hidden="true">06</p>
+            <h3 class="card-h">Troubleshooting logic</h3>
+            <p class="card-p">The instinct that separates seniors from juniors — reading drift,
+              defects and contamination before they read you.</p>
+            <p class="card-tags">DRIFT · UNIFORMITY · DEFECTS · CONTAMINATION</p>
+          </article>
+        </div>
+
+        <a class="linkedin-banner reveal" href="https://www.linkedin.com/company/thinfilmengineer"
+           target="_blank" rel="noopener">
+          <svg class="li-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/>
+          </svg>
+          <span>Published daily on LinkedIn — one lesson at a time.</span>
+          <span class="li-arrow" aria-hidden="true">→</span>
+        </a>
+
+        <!-- How thin is thin? -->
+        <figure class="spread scale-spread reveal">
+          <figcaption class="spread-head">
+            <p class="kicker">Scale · logarithmic, nanometres</p>
+            <h3 class="spread-h">How thin is thin?</h3>
+          </figcaption>
+          <div class="scale-visual" role="img"
+               aria-label="Logarithmic scale of film thicknesses in nanometres: gate dielectric about 1.5, diffusion barrier about 3, work-function metal about 5, etch stop about 15, hard mask about 80, and for scale a human hair at about 70,000 nanometres.">
+            <svg class="scale-svg" viewBox="0 0 1000 250" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <linearGradient id="irMark" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#5ec9e8"/>
+                  <stop offset=".5" stop-color="#9d8bf5"/>
+                  <stop offset="1" stop-color="#e79ac2"/>
+                </linearGradient>
+              </defs>
+              <line class="scale-axis" x1="20" y1="122" x2="980" y2="122" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+              <g class="scale-ticks" font-size="14" opacity="0.55">
+                <line x1="20" y1="117" x2="20" y2="127" stroke="currentColor"/><text x="20" y="146" text-anchor="middle">1&#8202;nm</text>
+                <line x1="212" y1="117" x2="212" y2="127" stroke="currentColor"/><text x="212" y="146" text-anchor="middle">10</text>
+                <line x1="404" y1="117" x2="404" y2="127" stroke="currentColor"/><text x="404" y="146" text-anchor="middle">100</text>
+                <line x1="596" y1="117" x2="596" y2="127" stroke="currentColor"/><text x="596" y="146" text-anchor="middle">1,000</text>
+                <line x1="788" y1="117" x2="788" y2="127" stroke="currentColor"/><text x="788" y="146" text-anchor="middle">10,000</text>
+                <line x1="980" y1="117" x2="980" y2="127" stroke="currentColor"/><text x="972" y="146" text-anchor="end">100,000&#8202;nm</text>
+              </g>
+              <!-- markers: x = 20 + 192*log10(nm) · label tiers avoid collisions -->
+              <g class="scale-marks">
+                <g class="scale-mark" style="--i:0">
+                  <circle cx="53.8" cy="122" r="6"/>
+                  <text x="40" y="88" text-anchor="start" class="scale-name">Gate dielectric</text>
+                  <text x="40" y="64" text-anchor="start" class="scale-val">~1.5&#8202;nm</text>
+                </g>
+                <g class="scale-mark" style="--i:1">
+                  <circle cx="111.6" cy="122" r="6"/>
+                  <text x="96" y="182" text-anchor="start" class="scale-name">Diffusion barrier</text>
+                  <text x="96" y="206" text-anchor="start" class="scale-val">~3&#8202;nm</text>
+                </g>
+                <g class="scale-mark" style="--i:2">
+                  <circle cx="154.2" cy="122" r="6"/>
+                  <text x="168" y="40" text-anchor="start" class="scale-name">Work-function metal</text>
+                  <text x="168" y="16" text-anchor="start" class="scale-val" dominant-baseline="hanging">~5&#8202;nm</text>
+                </g>
+                <g class="scale-mark" style="--i:3">
+                  <circle cx="245.8" cy="122" r="6"/>
+                  <text x="290" y="182" text-anchor="start" class="scale-name">Etch stop</text>
+                  <text x="290" y="206" text-anchor="start" class="scale-val">~15&#8202;nm</text>
+                </g>
+                <g class="scale-mark" style="--i:4">
+                  <circle cx="385.4" cy="122" r="6"/>
+                  <text x="385.4" y="88" text-anchor="middle" class="scale-name">Hard mask</text>
+                  <text x="385.4" y="64" text-anchor="middle" class="scale-val">~80&#8202;nm</text>
+                </g>
+                <g class="scale-mark scale-mark-hair" style="--i:5">
+                  <circle cx="950.3" cy="122" r="8"/>
+                  <text x="950.3" y="88" text-anchor="end" class="scale-name">Human hair, for scale</text>
+                  <text x="950.3" y="64" text-anchor="end" class="scale-val">~70,000&#8202;nm</text>
+                </g>
+              </g>
+            </svg>
+          </div>
+          <p class="spread-caption">On a linear scale, every film on this chart would be invisible
+            next to the hair. This is the length scale of the work.</p>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ── 6 · CHAPTER V — CAREERS ──────────────────────────── -->
+    <section class="careers" id="careers" aria-label="Chapter five — careers">
+      <div class="container">
+        <div class="chapter-head">
+          <p class="kicker kicker-ir reveal">Chapter V · Careers</p>
+          <h2 class="chapter-title">
+            <span class="line"><span class="line-in">Three doors into</span></span>
+            <span class="line"><span class="line-in">the same room.</span></span>
+          </h2>
+        </div>
+
+        <div class="careers-grid">
+          <article class="career reveal">
+            <h3 class="career-h">Getting in</h3>
+            <p class="career-p">A degree in physics, materials, chemical or electrical engineering,
+              and you want a process role. We teach the tool intuition and the troubleshooting
+              questions the interview will actually test.</p>
+          </article>
+          <article class="career reveal">
+            <h3 class="career-h">Moving up</h3>
+            <p class="career-p">Already in a fab. You want seniority, the harder modules, and the
+              command of statistics and root cause that promotion runs on.</p>
+          </article>
+          <article class="career reveal">
+            <h3 class="career-h">Switching across</h3>
+            <p class="career-p">From displays, photovoltaics, coatings or academic cleanrooms.
+              Vacuum and plasma experience transfers further than people think.</p>
+          </article>
+        </div>
+
+        <div class="path-map reveal" role="img"
+             aria-label="Career path map. Process engineer leads to senior or principal engineer, integration and yield, equipment vendor or applications roles, and R and D or technology development.">
+          <p class="kicker path-kicker">Where it leads</p>
+          <div class="path-flow">
+            <span class="path-node path-node-root">Process Engineer</span>
+            <span class="path-branch" aria-hidden="true"></span>
+            <div class="path-ends">
+              <span class="path-node">Senior / Principal</span>
+              <span class="path-node">Integration &amp; Yield</span>
+              <span class="path-node">Equipment vendor / Applications</span>
+              <span class="path-node">R&amp;D / Technology development</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 7 · SIGNUP ───────────────────────────────────────── -->
+    <section class="signup" id="signup" aria-label="Free interview pack signup">
+      <div class="container signup-inner">
+        <div class="signup-copy">
+          <p class="kicker kicker-ir reveal">Free download</p>
+          <h2 class="chapter-title signup-title">
+            <span class="line"><span class="line-in">The interview</span></span>
+            <span class="line"><span class="line-in">pack, free.</span></span>
+          </h2>
+          <p class="signup-p reveal">Fifty real interview questions asked in semiconductor process
+            engineering roles — with model answers — plus one-page reference sheets you can keep
+            open next to the tool.</p>
+          <div class="chip-row signup-chips reveal">
+            <span class="chip">50 QUESTIONS + ANSWERS</span>
+            <span class="chip">PVD SHEET</span>
+            <span class="chip">ALD SHEET</span>
+            <span class="chip">CVD SHEET</span>
+            <span class="chip">ETCH SHEET</span>
+            <span class="chip">SPC SHEET</span>
+          </div>
+        </div>
+
+        <form class="signup-form reveal" id="pack-form" novalidate>
+          <div class="field">
+            <label for="pf-name">Name</label>
+            <input id="pf-name" name="name" type="text" autocomplete="name" required
+                   placeholder="Your name">
+            <p class="field-error" id="pf-name-error" hidden>Please tell us your name.</p>
+          </div>
+          <div class="field">
+            <label for="pf-email">Email</label>
+            <input id="pf-email" name="email" type="email" autocomplete="email" required
+                   inputmode="email" placeholder="you@company.com">
+            <p class="field-error" id="pf-email-error" hidden>That email doesn&rsquo;t look right — please check it.</p>
+          </div>
+          <button class="btn btn-primary btn-submit" type="submit">
+            <span class="btn-submit-label">Send me the pack</span>
+          </button>
+          <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
+          <p class="privacy-line">Your details are used only to send the pack and the weekly
+            lesson. Unsubscribe any time.</p>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── 8 · FOOTER ─────────────────────────────────────────── -->
+  <footer class="footer section-dark" aria-label="Footer">
+    <div class="container">
+      <p class="footer-line">
+        <span class="line"><span class="line-in">Every chip is a stack of films.</span></span>
+      </p>
+      <div class="footer-links">
+        <a href="https://www.linkedin.com/company/thinfilmengineer" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="mailto:info@thinfilmengineer.com">info@thinfilmengineer.com</a>
+        <a href="mailto:info@thinfilmengineer.com?subject=Corporate%20training%20enquiry">Training for teams</a>
+      </div>
+      <div class="footer-base">
+        <p>© 2026 Thin Film Engineer</p>
+        <p class="footer-mono">Practical process education for the semiconductor industry, worldwide.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="assets/js/main.js"></script>
+</body>
+</html>

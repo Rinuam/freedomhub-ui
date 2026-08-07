@@ -1,0 +1,10 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--use-angle=swiftshader'] });
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, javaScriptEnabled: false });
+const page = await ctx.newPage();
+await page.goto('http://localhost:8080/', { waitUntil: 'load' });
+await page.waitForTimeout(800);
+await page.screenshot({ path: process.env.SP + '/nojs-full.png', fullPage: true });
+const h = await page.evaluate(() => document.body.scrollHeight).catch(() => 'n/a (js off)');
+console.log('saved nojs-full.png');
+await browser.close();
