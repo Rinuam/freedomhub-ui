@@ -1,0 +1,23 @@
+[project]
+name = "tfe-poster-maker"
+version = "1.0.0"
+description = "A1 print-ready posters from AI images: Real-ESRGAN, Apple Vision OCR, vector text"
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.6", "numpy>=1.26", "opencv-python-headless>=4.9", "Pillow>=10.2",
+                "PyMuPDF>=1.24", "fonttools>=4.47"]
+
+[project.optional-dependencies]
+mac = ["pyobjc-core>=10.1", "pyobjc-framework-Cocoa>=10.1", "pyobjc-framework-Quartz>=10.1",
+       "pyobjc-framework-Vision>=10.1"]
+
+[project.scripts]
+tfe-poster = "tfe_poster.cli:main"
+
+[tool.setuptools]
+packages = ["tfe_poster", "tfe_poster.gui"]
+
+[tool.setuptools.package-data]
+tfe_poster = ["resources/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
