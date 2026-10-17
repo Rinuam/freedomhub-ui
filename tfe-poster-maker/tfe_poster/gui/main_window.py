@@ -1,181 +1,123 @@
-"""Main window: settings, review, compare, report, batch."""
+"""Main window v2: Enhance (left) · Editor/Compare/Report (centre) · Text & Outputs (right)."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QAction, QKeySequence, QFont
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                               QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
-                               QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar,
-                               QPushButton, QSpinBox, QTabWidget, QToolBar, QVBoxLayout, QWidget,
-                               QDockWidget)
+import numpy as np
+from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtGui import QAction, QActionGroup, QFont, QKeySequence
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDockWidget, QFileDialog,
+                               QFormLayout, QGraphicsView, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
+                               QPlainTextEdit, QProgressBar, QPushButton, QTabWidget, QToolBar,
+                               QVBoxLayout, QWidget)
 
 from .. import APP_NAME, __version__
-from ..config import Settings, UPSCALE_MODELS
+from ..enhance import adjust as adj
+from ..enhance.pipeline import EnhanceSettings, Enhancer, estimate_seconds
+from ..formats import DEFAULT_TARGETS, OutputTarget, original_target, place
 from ..ocr import backend_name
-from ..project import Project, SIDE_CAR_SUFFIX, format_report
-from ..upscale import find_realesrgan
+from ..project import PROJECT_SUFFIX, Project, format_report
+from ..text.engine import autofit
+from ..text.model import EraseRegion
+from .canvas import Canvas
 from .compare import CompareView
-from .review import ReviewPanel
+from .enhance_panel import EnhancePanel
+from .imageutil import downscale
+from .models_dialog import ModelsDialog
+from .outputs_panel import OutputsPanel
+from .text_panel import TextPanel
 from .workers import Task
 
-IMAGE_FILTER = "Images (*.png *.jpg *.jpeg *.PNG *.JPG *.JPEG)"
-
-
-class SettingsPanel(QWidget):
-    def __init__(self, s: Settings, parent=None):
-        super().__init__(parent)
-        self.orient = QComboBox()
-        self.orient.addItems(["auto", "portrait", "landscape"])
-        self.margin = QDoubleSpinBox()
-        self.margin.setRange(0, 150)
-        self.margin.setSuffix(" mm")
-        self.upscale = QCheckBox("Real-ESRGAN 4x")
-        self.model = QComboBox()
-        for k, v in UPSCALE_MODELS.items():
-            self.model.addItem(v, k)
-        self.inpaint = QComboBox()
-        self.inpaint.addItem("Telea (fast, smooth)", "telea")
-        self.inpaint.addItem("Navier-Stokes", "ns")
-        self.pdfbg = QComboBox()
-        self.pdfbg.addItem("JPEG q95 (smaller PDF)", "jpeg")
-        self.pdfbg.addItem("Lossless (large PDF)", "lossless")
-        self.vec_default = QComboBox()
-        self.vec_default.addItem("Confident boxes", "auto")
-        self.vec_default.addItem("All boxes", "all")
-        self.vec_default.addItem("None", "none")
-        esr = find_realesrgan(s.realesrgan_path)
-        self.esr_label = QLabel(f"Real-ESRGAN: {'found' if esr else '<b>not found</b> - Lanczos fallback'}")
-        self.esr_label.setWordWrap(True)
-        self.ocr_label = QLabel(f"OCR: {backend_name()}")
-        self.reprocess = QPushButton("Apply && re-process")
-        f = QFormLayout(self)
-        f.addRow("Orientation", self.orient)
-        f.addRow("Margin", self.margin)
-        f.addRow("Upscale", self.upscale)
-        f.addRow("Model", self.model)
-        f.addRow("Inpaint", self.inpaint)
-        f.addRow("PDF background", self.pdfbg)
-        f.addRow("Vectorise by default", self.vec_default)
-        f.addRow(self.reprocess)
-        f.addRow(self.esr_label)
-        f.addRow(self.ocr_label)
-        self.load(s)
-
-    def load(self, s: Settings) -> None:
-        self.orient.setCurrentText(s.orientation)
-        self.margin.setValue(s.margin_mm)
-        self.upscale.setChecked(s.upscale)
-        self.model.setCurrentIndex(max(0, self.model.findData(s.upscale_model)))
-        self.inpaint.setCurrentIndex(max(0, self.inpaint.findData(s.inpaint_method)))
-        self.pdfbg.setCurrentIndex(max(0, self.pdfbg.findData(s.pdf_background)))
-        self.vec_default.setCurrentIndex(max(0, self.vec_default.findData(s.batch_vectorise)))
-
-    def store(self, s: Settings) -> Settings:
-        s.orientation = self.orient.currentText()
-        s.margin_mm = self.margin.value()
-        s.upscale = self.upscale.isChecked()
-        s.upscale_model = self.model.currentData()
-        s.inpaint_method = self.inpaint.currentData()
-        s.pdf_background = self.pdfbg.currentData()
-        s.batch_vectorise = self.vec_default.currentData()
-        return s
+IMAGE_FILTER = "Images (*.png *.jpg *.jpeg *.webp *.tif *.tiff *.PNG *.JPG *.JPEG)"
+PREVIEW_SIDE = 2400
+COMPARE_CAP = 8000
 
 
 class BatchDialog(QDialog):
-    def __init__(self, settings: Settings, parent=None):
-        super().__init__(parent)
+    def __init__(self, win, folder: str = ""):
+        super().__init__(win)
+        self.win = win
         self.setWindowTitle("Batch process folder")
-        self.resize(720, 480)
-        self.settings = settings
-        self.inp = QLineEdit()
-        self.out = QLineEdit()
+        self.resize(760, 520)
+        self.inp, self.out = QLineEdit(folder), QLineEdit(str(Path(folder) / "tfe_output") if folder else "")
         b1, b2 = QPushButton("…"), QPushButton("…")
         b1.clicked.connect(lambda: self._pick(self.inp))
         b2.clicked.connect(lambda: self._pick(self.out))
         self.vec = QComboBox()
-        self.vec.addItem("Confident boxes (>= 0.6)", "auto")
-        self.vec.addItem("All boxes", "all")
-        self.vec.addItem("None (raster only)", "none")
-        self.vec.setCurrentIndex(max(0, self.vec.findData(settings.batch_vectorise)))
+        self.vec.addItem("Confident lines (≥ 0.6)", "auto")
+        self.vec.addItem("All lines", "all")
+        self.vec.addItem("None (keep raster text)", "none")
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setFont(QFont("Menlo", 11))
         self.bar = QProgressBar()
         self.go = QPushButton("Start")
         self.go.clicked.connect(self._start)
-        close = QPushButton("Close")
-        close.clicked.connect(self.close)
+        stop = QPushButton("Stop")
+        stop.clicked.connect(lambda: self.task and self.task.stop())
         r1, r2 = QHBoxLayout(), QHBoxLayout()
         r1.addWidget(self.inp)
         r1.addWidget(b1)
         r2.addWidget(self.out)
         r2.addWidget(b2)
-        form = QFormLayout()
-        form.addRow("Input folder", r1)
-        form.addRow("Output folder", r2)
-        form.addRow("Vector text", self.vec)
-        form.addRow(QLabel("Images with saved review edits (<name>.tfe.json) reuse them."))
-        btns = QHBoxLayout()
-        btns.addStretch(1)
-        btns.addWidget(self.go)
-        btns.addWidget(close)
+        f = QFormLayout()
+        f.addRow("Input folder", r1)
+        f.addRow("Output folder", r2)
+        f.addRow("Vector text", self.vec)
+        f.addRow(QLabel("Uses the current Enhance settings and the checked Outputs. "
+                        "Images with saved edits (<name>.tfe.json) reuse them."))
+        btn = QHBoxLayout()
+        btn.addStretch(1)
+        btn.addWidget(self.go)
+        btn.addWidget(stop)
         lay = QVBoxLayout(self)
-        lay.addLayout(form)
+        lay.addLayout(f)
         lay.addWidget(self.log, 1)
         lay.addWidget(self.bar)
-        lay.addLayout(btns)
+        lay.addLayout(btn)
         self.task = None
 
-    def _pick(self, edit: QLineEdit) -> None:
-        d = QFileDialog.getExistingDirectory(self, "Choose folder", edit.text())
+    def _pick(self, e):
+        d = QFileDialog.getExistingDirectory(self, "Folder", e.text())
         if d:
-            edit.setText(d)
-            if edit is self.inp and not self.out.text():
+            e.setText(d)
+            if e is self.inp and not self.out.text():
                 self.out.setText(str(Path(d) / "tfe_output"))
 
-    def _start(self) -> None:
-        from ..batch import run_batch, find_images
+    def _start(self):
+        from ..batch import find_images, run_batch
         inp = Path(self.inp.text())
-        if not inp.is_dir():
-            QMessageBox.warning(self, "Batch", "Choose an input folder")
+        if not inp.is_dir() or not find_images(inp):
+            QMessageBox.warning(self, "Batch", "Choose a folder containing images")
             return
         out = Path(self.out.text() or inp / "tfe_output")
-        n = len(find_images(inp))
-        if not n:
-            QMessageBox.warning(self, "Batch", "No PNG/JPG images in that folder")
-            return
-        s = Settings.from_dict(self.settings.to_dict())
-        s.batch_vectorise = self.vec.currentData()
+        enh = EnhanceSettings.from_dict(self.win.enhance.to_dict())
+        targets = [OutputTarget.from_dict(t.to_dict()) for t in self.win.targets]
+        vec = self.vec.currentData()
         self.go.setEnabled(False)
-        self.log.appendPlainText(f"Processing {n} images -> {out}")
+        self.log.appendPlainText(f"{len(find_images(inp))} images -> {out}")
 
         def job(progress):
-            return run_batch(inp, out, s,
-                             lambda i, n, m, f: progress(m, (i + f) / n),
+            return run_batch(inp, out, enh, targets, vec, "", lambda i, n, m, f: progress(m, (i + f) / n),
                              should_stop=lambda: self.task.stopping)
         self.task = Task(job, self)
-        self.task.progress.connect(lambda m, f: (self.bar.setValue(int(f * 100)), self.bar.setFormat(m)))
+        self.task.progress.connect(lambda m, f: (self.bar.setValue(int(f * 100)), self.bar.setFormat(m[:90])))
         self.task.done.connect(self._done)
         self.task.failed.connect(lambda e: (self.log.appendPlainText("FAILED: " + e), self.go.setEnabled(True)))
         self.task.start()
 
-    def _done(self, rows) -> None:
+    def _done(self, rows):
         for r in rows:
-            self.log.appendPlainText(
-                f"{r['status']:5}  {r['file']}  native {r['native_ppi']} -> effective "
-                f"{r['effective_ppi']} ppi, {r['vectorised']}/{r['text_boxes']} vector"
-                + (f"\n       {r['error'].splitlines()[0]}" if r["error"] else ""))
-        self.log.appendPlainText("Summary written to batch_summary.csv")
+            self.log.appendPlainText(f"{r['status']:5} {r['file']}  {r['ai']}  {r['vectorised']}/{r['text_blocks']} "
+                                     "vector" + (f"\n      {r['error'].splitlines()[0]}" if r["error"] else ""))
+        self.log.appendPlainText("Summary: batch_summary.csv")
         self.bar.setValue(100)
-        self.bar.setFormat("Done")
         self.go.setEnabled(True)
 
-    def closeEvent(self, ev) -> None:
+    def closeEvent(self, ev):
         if self.task and self.task.isRunning():
             self.task.stop()
-            self.log.appendPlainText("Stopping after the current image…")
             self.task.wait()
         super().closeEvent(ev)
 
@@ -184,314 +126,606 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.resize(1500, 950)
+        self.resize(1680, 1000)
         self.qs = QSettings("Ideaded", "TFE Poster Maker")
         try:
-            import json
-            self.settings = Settings.from_dict(json.loads(self.qs.value("settings", "{}")))
+            self.enhance = EnhanceSettings.from_dict(json.loads(self.qs.value("enhance", "{}")))
         except Exception:
-            self.settings = Settings()
+            self.enhance = EnhanceSettings()
+        try:
+            self.targets = [OutputTarget.from_dict(t) for t in json.loads(self.qs.value("targets", "[]"))] or \
+                [OutputTarget.from_dict(t.to_dict()) for t in DEFAULT_TARGETS]
+        except Exception:
+            self.targets = [OutputTarget.from_dict(t.to_dict()) for t in DEFAULT_TARGETS]
         self.project: Project | None = None
         self.task: Task | None = None
-        self._preview_stale = True
+        self._preview_cache = {}            # mode -> (img, px_per_src)
+        self.view_mode = "original"
 
-        self.review = ReviewPanel()
-        self.review.renderRequested.connect(self.render_preview)
-        self.review.changed.connect(self._mark_stale)
+        # ---------------- centre
+        self.canvas = Canvas()
+        self.canvas.blockSelected.connect(self._canvas_selected)
+        self.canvas.blockMoved.connect(self._block_moved)
+        self.canvas.addTextAt.connect(self._add_text)
+        self.canvas.eraseRect.connect(self._erase_rect)
+        self.canvas.eraseDeleted.connect(self._erase_deleted)
+        self.mode = QComboBox()
+        self.mode.addItem("Original image", "original")
+        self.mode.addItem("AI enhanced", "ai")
+        self.mode.addItem("Final background (text removed)", "final")
+        self.mode.activated.connect(self._mode_changed)
+        self.show_text = QCheckBox("Vector text")
+        self.show_text.setChecked(True)
+        self.show_text.toggled.connect(self.canvas.set_text_visible)
+        self.show_erase = QCheckBox("Erase areas")
+        self.show_erase.setChecked(True)
+        self.show_erase.toggled.connect(self.canvas.set_erase_visible)
+        tools = QActionGroup(self)
+        self.tool_btns = {}
+        tbar = QHBoxLayout()
+        for key, label, tip in (("select", "↖ Select/Move", "Drag text; arrows nudge (Shift = 10 px)"),
+                                ("text", "T  Add text", "Click where the new text should go"),
+                                ("erase", "⌫ Erase area", "Drag a rectangle to remove anything with LaMa")):
+            b = QPushButton(label)
+            b.setCheckable(True)
+            b.setToolTip(tip)
+            b.clicked.connect(lambda _=False, k=key: self.set_tool(k))
+            self.tool_btns[key] = b
+            tbar.addWidget(b)
+        fitb = QPushButton("Fit")
+        fitb.clicked.connect(self.canvas.fit)
+        tbar.addWidget(fitb)
+        tbar.addStretch(1)
+        tbar.addWidget(QLabel("Show:"))
+        tbar.addWidget(self.mode)
+        tbar.addWidget(self.show_text)
+        tbar.addWidget(self.show_erase)
+        ed = QWidget()
+        el = QVBoxLayout(ed)
+        el.setContentsMargins(0, 0, 0, 0)
+        el.addLayout(tbar)
+        el.addWidget(self.canvas, 1)
+
         self.compare = CompareView()
         self.cmp_mode = QComboBox()
-        self.cmp_mode.addItem("Plain bicubic  vs  final", "naive")
-        self.cmp_mode.addItem("Upscaled raster (text untouched)  vs  final", "canvas")
-        self.cmp_mode.addItem("Plain bicubic  vs  upscaled raster", "upscale")
-        self.cmp_mode.currentIndexChanged.connect(self._update_compare)
-        cmp_bar = QHBoxLayout()
+        self.cmp_mode.addItem("Original (bicubic)  vs  AI enhanced", "orig-ai")
+        self.cmp_mode.addItem("Original (bicubic)  vs  Final", "orig-final")
+        self.cmp_mode.addItem("AI enhanced  vs  Final", "ai-final")
+        self.cmp_mode.activated.connect(lambda _: self.update_compare())
+        cb = QHBoxLayout()
         for label, fn in (("Fit", self.compare.fit), ("100%", self.compare.actual),
-                          ("400%", lambda: self.compare.set_zoom(4.0))):
+                          ("200%", lambda: self.compare.set_zoom(2.0))):
             b = QPushButton(label)
             b.clicked.connect(fn)
-            cmp_bar.addWidget(b)
-        cmp_bar.addWidget(self.cmp_mode)
-        cmp_bar.addStretch(1)
-        cmp_bar.addWidget(QLabel("Wheel: zoom · drag: pan · drag the handle: split · double-click: 100%"))
-        cmp_w = QWidget()
-        cl = QVBoxLayout(cmp_w)
+            cb.addWidget(b)
+        cb.addWidget(self.cmp_mode)
+        cb.addStretch(1)
+        cb.addWidget(QLabel("wheel = zoom · drag = pan · drag handle = split · double-click = 100%"))
+        cw = QWidget()
+        cl = QVBoxLayout(cw)
         cl.setContentsMargins(0, 0, 0, 0)
-        cl.addLayout(cmp_bar)
+        cl.addLayout(cb)
         cl.addWidget(self.compare, 1)
-
         self.report = QPlainTextEdit()
         self.report.setReadOnly(True)
         self.report.setFont(QFont("Menlo", 12))
-
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.review, "Review")
-        self.tabs.addTab(cmp_w, "Before / After")
-        self.tabs.addTab(self.report, "DPI report")
+        self.tabs.addTab(ed, "Editor")
+        self.tabs.addTab(cw, "Before / After")
+        self.tabs.addTab(self.report, "Report")
         self.tabs.currentChanged.connect(self._tab_changed)
         self.setCentralWidget(self.tabs)
 
-        self.panel = SettingsPanel(self.settings)
-        self.panel.reprocess.clicked.connect(self.reprocess)
-        dock = QDockWidget("Settings")
-        dock.setWidget(self.panel)
-        dock.setFeatures(QDockWidget.DockWidgetMovable)
-        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        # ---------------- docks
+        self.enh_panel = EnhancePanel(self.enhance)
+        self.enh_panel.settingsChanged.connect(self._enh_changed)
+        self.enh_panel.adjustChanged.connect(self._adjust_changed)
+        self.enh_panel.runRequested.connect(self.run_enhance)
+        self.enh_panel.testRequested.connect(self.test_region)
+        self.enh_panel.modelsRequested.connect(self.models)
+        self.text_panel = TextPanel()
+        self.text_panel.changed.connect(self._block_changed)
+        self.text_panel.structureChanged.connect(self._structure_changed)
+        self.text_panel.selected.connect(lambda bid: self.canvas.select_block(bid, emit=False))
+        self.text_panel.suggestRequested.connect(self.suggest_fonts)
+        self.text_panel.toolRequested.connect(self.set_tool)
+        self.out_panel = OutputsPanel()
+        self.out_panel.set_targets(self.targets)
+        self.out_panel.changed.connect(self._targets_changed)
+        self.out_panel.exportRequested.connect(self.export)
+        self.out_panel.out_dir.setText(self.qs.value("out_dir", ""))
+        right = QTabWidget()
+        right.addTab(self.text_panel, "Text")
+        right.addTab(self.out_panel, "Outputs")
+        self.right_tabs = right
+        for title, w, area, width in (("Enhance", self.enh_panel, Qt.LeftDockWidgetArea, 390),
+                                      ("Text and outputs", right, Qt.RightDockWidgetArea, 400)):
+            d = QDockWidget(title)
+            d.setWidget(w)
+            d.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
+            w.setMinimumWidth(width)
+            self.addDockWidget(area, d)
 
+        # ---------------- actions
         tb = QToolBar("Main")
         tb.setMovable(False)
         self.addToolBar(tb)
-        self.act_open = QAction("Open image…", self, shortcut=QKeySequence.Open, triggered=self.open_dialog)
-        self.act_batch = QAction("Batch folder…", self, shortcut="Ctrl+B", triggered=self.batch)
-        self.act_render = QAction("Render preview", self, shortcut="Ctrl+R", triggered=self.render_preview)
-        self.act_export = QAction("Export PDF + PNG…", self, shortcut="Ctrl+E", triggered=self.export)
-        for a in (self.act_open, self.act_batch, self.act_render, self.act_export):
+        self.act_open = QAction("Open…", self, shortcut=QKeySequence.Open, triggered=self.open_dialog)
+        self.act_save = QAction("Save edits", self, shortcut=QKeySequence.Save, triggered=self.save_edits)
+        self.act_enh = QAction("✨ Enhance", self, shortcut="Ctrl+R", triggered=self.run_enhance)
+        self.act_export = QAction("⬇ Export", self, shortcut="Ctrl+E", triggered=self.export)
+        self.act_batch = QAction("Batch…", self, shortcut="Ctrl+B", triggered=self.batch)
+        self.act_models = QAction("Models…", self, triggered=self.models)
+        for a in (self.act_open, self.act_save, self.act_enh, self.act_export, self.act_batch, self.act_models):
             tb.addAction(a)
         m = self.menuBar().addMenu("File")
-        for a in (self.act_open, self.act_batch, self.act_render, self.act_export):
+        for a in (self.act_open, self.act_save, self.act_export, self.act_batch):
             m.addAction(a)
+        self.menuBar().addMenu("AI").addActions([self.act_enh, self.act_models])
         self.menuBar().addMenu("Help").addAction(QAction("About", self, triggered=self.about))
 
         self.bar = QProgressBar()
-        self.bar.setMaximumWidth(420)
-        self.bar.setTextVisible(True)
+        self.bar.setMaximumWidth(460)
         self.bar.hide()
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.hide()
+        self.cancel_btn.clicked.connect(lambda: self.task and self.task.stop())
         self.statusBar().addPermanentWidget(self.bar)
-        self._enable(False)
-        self.setAcceptDrops(True)
+        self.statusBar().addPermanentWidget(self.cancel_btn)
         self.statusBar().showMessage("Open an image (⌘O) or drop one here")
+        self.setAcceptDrops(True)
+        self._final_timer = QTimer(self, singleShot=True, interval=900, timeout=self._refresh_final)
+        self.set_tool("select")
+        self._enable()
 
-    # ---------------------------------------------------------------- helpers
-    def _enable(self, has_project: bool) -> None:
+    # ================================================================ helpers
+    def _enable(self):
         busy = self.task is not None and self.task.isRunning()
-        ready = has_project and self.project is not None and self.project.canvas is not None
-        self.act_render.setEnabled(ready and not busy)
-        self.act_export.setEnabled(ready and not busy)
+        has = self.project is not None
+        for a in (self.act_enh, self.act_export, self.act_save):
+            a.setEnabled(has and not busy)
+        self.enh_panel.btn_run.setEnabled(has and not busy)
+        self.enh_panel.btn_test.setEnabled(has and not busy)
+        self.out_panel.btn_export.setEnabled(has and not busy)
         self.act_open.setEnabled(not busy)
-        self.review.btn_render.setEnabled(ready and not busy)
-        self.panel.reprocess.setEnabled(has_project and not busy)
 
-    def _run(self, fn, on_done, label: str) -> None:
+    def _run(self, fn, on_done, label, cancellable=True):
+        if self.task and self.task.isRunning():
+            QMessageBox.information(self, APP_NAME, "Please wait for the current job (or cancel it).")
+            return False
         self.task = Task(fn, self)
         self.bar.show()
         self.bar.setValue(0)
         self.bar.setFormat(label)
+        self.cancel_btn.setVisible(cancellable)
         self.task.progress.connect(self._progress)
         self.task.done.connect(lambda r: (self._finish(), on_done(r)))
         self.task.failed.connect(self._failed)
         self.task.start()
-        self._enable(True)
+        self._enable()
+        return True
 
-    def _progress(self, msg: str, f: float) -> None:
+    def _progress(self, msg, f):
         self.bar.setValue(int(f * 100))
         self.bar.setFormat(f"{msg}  %p%")
         self.statusBar().showMessage(msg)
 
-    def _finish(self) -> None:
+    def _finish(self):
         self.task = None
         self.bar.hide()
-        self._enable(self.project is not None)
+        self.cancel_btn.hide()
+        self._enable()
 
-    def _failed(self, err: str) -> None:
+    def _failed(self, err):
+        stopped = self.task is not None and self.task.stopping
         self._finish()
+        if stopped or "Cancelled" in err or "InterruptedError" in err:
+            self.statusBar().showMessage("Cancelled")
+            return
         QMessageBox.critical(self, APP_NAME, err[:3000])
 
-    def _save_settings(self) -> None:
-        import json
-        self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
+    def _save_settings(self):
+        self.qs.setValue("enhance", json.dumps(self.enhance.to_dict()))
+        self.qs.setValue("targets", json.dumps([t.to_dict() for t in self.targets]))
+        self.qs.setValue("out_dir", self.out_panel.out_dir.text())
 
-    def _mark_stale(self) -> None:
-        self._preview_stale = True
+    def set_tool(self, key):
+        self.canvas.tool = key
+        for k, b in self.tool_btns.items():
+            b.setChecked(k == key)
+        self.canvas.setDragMode(QGraphicsView.RubberBandDrag if key == "select" else QGraphicsView.NoDrag)
+        self.canvas.viewport().setCursor(Qt.CrossCursor if key != "select" else Qt.ArrowCursor)
 
-    # ------------------------------------------------------------------ open
-    def dragEnterEvent(self, ev) -> None:
+    def _units(self):
+        p = self.project
+        if not p:
+            return 1.0, "px"
+        for t in self.targets:
+            if t.enabled and t.kind == "print":
+                pl = place(t, *p.size)
+                return pl.scale * 72.0 / pl.dpi, f"pt on {t.name}"
+        return 1.0, "px @ source"
+
+    # ================================================================ open
+    def dragEnterEvent(self, ev):
         if ev.mimeData().hasUrls():
             ev.acceptProposedAction()
 
-    def dropEvent(self, ev) -> None:
+    def dropEvent(self, ev):
         paths = [Path(u.toLocalFile()) for u in ev.mimeData().urls()]
         if paths and paths[0].is_dir():
             self.batch(str(paths[0]))
         elif paths:
             self.open(paths[0])
 
-    def open_dialog(self) -> None:
-        start = self.qs.value("last_dir", str(Path.home()))
-        fn, _ = QFileDialog.getOpenFileName(self, "Open image", start, IMAGE_FILTER)
+    def open_dialog(self):
+        fn, _ = QFileDialog.getOpenFileName(self, "Open image", self.qs.value("last_dir", str(Path.home())),
+                                            IMAGE_FILTER)
         if fn:
             self.qs.setValue("last_dir", str(Path(fn).parent))
             self.open(Path(fn))
 
-    def open(self, path: Path) -> None:
+    def open(self, path: Path):
         if self.task and self.task.isRunning():
-            QMessageBox.information(self, APP_NAME, "Please wait for the current step to finish.")
+            QMessageBox.information(self, APP_NAME, "Please wait for the current job to finish.")
             return
-        self.settings = self.panel.store(self.settings)
-        self._save_settings()
-        proj = Project(path, Settings.from_dict(self.settings.to_dict()))
+        proj = Project(path)
+        proj.enhance = self.enhance
+        proj.targets = self.targets
         try:
             proj.load()
         except Exception as e:
             QMessageBox.critical(self, APP_NAME, f"Cannot open {path.name}:\n{e}")
             return
+        saved = next((p for p in (path.parent / "tfe_output" / f"{path.stem}{PROJECT_SUFFIX}",
+                                  path.with_name(path.stem + PROJECT_SUFFIX)) if p.is_file()), None)
+        use_saved = bool(saved) and QMessageBox.question(
+            self, APP_NAME, f"Load your saved edits from\n{saved}?") == QMessageBox.Yes
         self.project = proj
+        self._preview_cache = {}
         self.compare.clear()
         self.setWindowTitle(f"{APP_NAME} — {path.name}")
-        sidecar = self._find_sidecar(path)
-        use_saved = False
-        if sidecar:
-            use_saved = QMessageBox.question(
-                self, APP_NAME, f"Load saved review edits from\n{sidecar}?") == QMessageBox.Yes
+        self.out_panel.set_source_size(proj.size)
+        if not self.out_panel.out_dir.text():
+            self.out_panel.out_dir.setText(str(path.parent / "tfe_output"))
 
         def job(progress):
             if use_saved:
-                proj.load_sidecar(sidecar)
+                proj.load_edits(saved, settings=False)
                 proj.ocr_backend = "saved edits"
             else:
-                proj.detect_text(lambda m, f: progress(m, 0.05 * f))
-            progress("Text detected - upscaling…", 0.05)
+                proj.detect_text(progress)
             return proj
-        self._run(job, self._ocr_done, "Detecting text…")
+        self._run(job, self._opened, "Detecting text…", cancellable=False)
 
-    def _find_sidecar(self, path: Path):
-        for p in (path.parent / "tfe_output" / f"{path.stem}{SIDE_CAR_SUFFIX}",
-                  path.with_name(path.stem + SIDE_CAR_SUFFIX)):
-            if p.is_file():
-                return p
-        return None
+    def _opened(self, proj):
+        self.view_mode = "original"
+        self.mode.setCurrentIndex(0)
+        self._set_bg()
+        if any(b.erase for b in proj.blocks):      # show the clean background under the vector text
+            self.mode.setCurrentIndex(2)
+            self.view_mode = "final"
+            QTimer.singleShot(50, self._refresh_final)
+        self.canvas.set_project(proj)
+        self.text_panel.set_project(proj, *self._units())
+        self._update_eta()
+        self.right_tabs.setCurrentIndex(0)
+        self.statusBar().showMessage(f"{len(proj.blocks)} text lines found ({backend_name()}). "
+                                     "Edit text, then ✨ Enhance (⌘R) and ⬇ Export (⌘E).")
+        self.report.setPlainText(format_report(proj.report([])))
 
-    def _ocr_done(self, proj) -> None:
-        self.review.set_project(proj)
-        self.report.setPlainText(f"{len(proj.boxes)} text boxes. Upscaling…")
-        self._prepare()
-
-    def _prepare(self) -> None:
-        proj = self.project
-        self._preview_stale = True
-
-        def job(progress):
-            proj.prepare(progress)
-            return proj
-        self._run(job, self._prepared, "Upscaling…")
-
-    def _prepared(self, proj) -> None:
-        self.review.refresh_background()
-        self.report.setPlainText(format_report(proj.dpi_report()))
-        self.statusBar().showMessage(
-            f"Ready: {proj.upscale_method}. Review boxes, then Render preview (⌘R) or Export (⌘E).")
-
-    def reprocess(self) -> None:
-        if not self.project:
-            return
-        old = self.project
-        self.settings = self.panel.store(self.settings)
-        self._save_settings()
-        boxes = old.boxes
-        proj = Project(old.source_path, Settings.from_dict(self.settings.to_dict()))
-        proj.load()
-        proj.boxes, proj.ocr_backend = boxes, old.ocr_backend
-        self.project = proj
-        self.review.set_project(proj)
-        self.compare.clear()
-        self._prepare()
-
-    # ---------------------------------------------------------------- render
-    def render_preview(self, then=None) -> None:
-        if not self.project or self.project.canvas is None:
-            return
-        proj = self.project
-        self.settings = self.panel.store(self.settings)
-        proj.settings.inpaint_method = self.settings.inpaint_method
-
-        def job(progress):
-            return proj.render(progress)
-        self._run(job, lambda r: self._rendered(r, then), "Rendering…")
-
-    def _rendered(self, res, then=None) -> None:
-        _, placements, flat = res
-        self._preview_stale = False
-        self.review.set_result_preview(flat)
-        self._update_compare()
-        self.report.setPlainText(format_report(self.project.dpi_report(placements)))
-        missing = [p for p in placements if p.missing_glyphs]
-        msg = "Preview rendered"
-        if missing:
-            msg += f" - {len(missing)} box(es) use a font missing glyphs"
-        self.statusBar().showMessage(msg)
-        if then:
-            then()
-        elif self.tabs.currentIndex() == 0:
-            self.review.show_result.setChecked(True)
-
-    def _update_compare(self) -> None:
+    # ================================================================ preview
+    def _base(self, mode):
         p = self.project
-        cache = getattr(p, "_render_cache", None) if p else None
-        if not p or p.canvas is None:
-            return
-        mode = self.cmp_mode.currentData()
-        if not hasattr(p, "_naive") or p._naive is None:
-            p._naive = p.naive_before()
-        if mode == "upscale":
-            self.compare.set_images(p._naive, p.canvas, ("Plain bicubic", "Upscaled"), p.layout.dpi)
-            return
-        if not cache:
-            self.compare.clear()
-            return
-        flat = cache[1][2]
-        before = p._naive if mode == "naive" else p.canvas
-        lab = "Plain bicubic" if mode == "naive" else "Upscaled raster"
-        self.compare.set_images(before, flat, (lab, "Final"), p.layout.dpi)
+        if mode in self._preview_cache:
+            return self._preview_cache[mode]
+        if mode == "original":
+            r = downscale(p.src, PREVIEW_SIDE)
+        elif mode == "ai":
+            if p.master is None:
+                return None
+            r = p.preview_base(PREVIEW_SIDE)
+        else:
+            return None
+        self._preview_cache[mode] = r
+        return r
 
-    def _tab_changed(self, i: int) -> None:
-        if i == 1 and self.project and self.project.canvas is not None:
-            if self._preview_stale and not (self.task and self.task.isRunning()) \
-                    and self.cmp_mode.currentData() != "upscale":
-                self.render_preview()
-            else:
-                self._update_compare()
+    def _set_bg(self):
+        p = self.project
+        if not p:
+            return
+        base = self._base(self.view_mode)
+        if base is None:
+            base = self._base("ai") or self._base("original")
+        img, k = base
+        if self.view_mode != "original":
+            img = adj.apply(img, p.enhance.adjust, k)
+        self.canvas.set_background(img, k)
 
-    # ---------------------------------------------------------------- export
-    def export(self) -> None:
-        if not self.project or self.project.canvas is None:
+    def _mode_changed(self, _=None):
+        self.view_mode = self.mode.currentData()
+        if self.view_mode == "ai" and self.project and self.project.master is None:
+            self.statusBar().showMessage("Run ✨ Enhance first — showing the original for now")
+        if self.view_mode == "final":
+            self._refresh_final()
             return
-        proj = self.project
-        start = str(proj.source_path.parent / "tfe_output")
-        d = QFileDialog.getExistingDirectory(self, "Export to folder", start)
-        if not d:
+        self._set_bg()
+
+    def _refresh_final(self):
+        p = self.project
+        if not p or self.view_mode != "final":
             return
-        self.settings = self.panel.store(self.settings)
-        proj.settings.inpaint_method = self.settings.inpaint_method
-        proj.settings.pdf_background = self.settings.pdf_background
+        if self.task and self.task.isRunning():
+            self._final_timer.start()
+            return
 
         def job(progress):
-            return proj.export(Path(d), progress)
+            return p.preview_base(PREVIEW_SIDE, cleaned=True)
+
+        def done(r):
+            self._preview_cache["final"] = r
+            self._set_bg()
+        self._run(job, done, "Removing text for preview…")
+
+    def _adjust_changed(self):
+        self._set_bg()
+        self._save_settings()
+
+    # ================================================================ enhance
+    def _enh_changed(self):
+        self._save_settings()
+        self._update_eta()
+
+    def _update_eta(self):
+        p = self.project
+        if not p:
+            return
+        try:
+            enh = Enhancer(self.enhance, p.src)
+            f = p.target_factor()
+            mid = enh.s.model
+            secs = estimate_seconds(mid, p.size[0] * p.size[1], f, self.enhance.tta,
+                                    "mps" if enh.backend == "torch" else "cpu")
+            if self.enhance.detail_model and self.enhance.detail_blend > 0:
+                secs += estimate_seconds(self.enhance.detail_model, p.size[0] * p.size[1], f, self.enhance.tta)
+            t = f"{secs / 60:.0f} min" if secs > 90 else f"{secs:.0f} s"
+            out = p.size[0] * f, p.size[1] * f
+            why = f"<br>{enh.auto_reason}" if enh.auto_reason else ""
+            self.enh_panel.set_eta(f"Plan: {enh.describe()} → ×{f} = {out[0]}×{out[1]} px "
+                                   f"({out[0] * out[1] / 1e6:.0f} MP).<br>Rough time on Apple GPU: ~{t}{why}"
+                                   + ("" if enh.backend == "torch" else
+                                      "<br><b>Model not installed — open Models… to download it.</b>"))
+        except Exception as e:
+            self.enh_panel.set_eta(f"{e}")
+
+    def run_enhance(self):
+        p = self.project
+        if not p:
+            return
+
+        def job(progress):
+            p.run_enhance(progress, lambda: self.task.stopping)
+            return p
+
+        def done(_):
+            self._preview_cache.pop("ai", None)
+            self._preview_cache.pop("final", None)
+            self.view_mode = "ai"
+            self.mode.setCurrentIndex(1)
+            self._set_bg()
+            info = p.master_info
+            self.statusBar().showMessage(f"Enhanced ×{p.master_factor} with {info.get('method')} in "
+                                         f"{info.get('seconds', 0)} s" + (" (cache)" if info.get("cached") else ""))
+            self.report.setPlainText(format_report(p.report([])))
+            self._compare_cache = {}
+        self._run(job, done, "Enhancing…")
+
+    def test_region(self):
+        p = self.project
+        if not p:
+            return
+        r = self.canvas.visible_source_rect()
+        cx, cy = r.center().x(), r.center().y()
+        w, h = p.size
+        half = 128
+        x0, y0 = int(max(0, min(w - 2 * half, cx - half))), int(max(0, min(h - 2 * half, cy - half)))
+        crop = p.src[y0:y0 + 2 * half, x0:x0 + 2 * half]
+        settings = EnhanceSettings.from_dict(self.enhance.to_dict())
+
+        def job(progress):
+            enh = Enhancer(settings, p.src)
+            f = 4 if enh.backend != "torch" else max(2, enh.model_scale)
+            res = enh.run(crop, f, progress, lambda: self.task.stopping)
+            return res, f, enh.describe()
+
+        def done(r):
+            import cv2
+            res, f, name = r
+            bic = cv2.resize(crop, (res.image.shape[1], res.image.shape[0]), interpolation=cv2.INTER_CUBIC)
+            self.compare.set_images(bic, res.image, ("Bicubic", f"{name} (test ×{f}, {res.seconds:.1f} s)"))
+            self.tabs.setCurrentIndex(1)
+            self.compare.fit()
+        self._run(job, done, "Testing on region…")
+
+    # ================================================================ text
+    def _canvas_selected(self, bid):
+        self.right_tabs.setCurrentIndex(0)
+        self.text_panel.select(bid)
+
+    def _block_moved(self, bid):
+        b = self.text_panel.block(bid)
+        if b is self.text_panel._cur:
+            self.text_panel.load_block(b)
+
+    def _block_changed(self, bid):
+        b = self.text_panel.block(bid)
+        if b is None:
+            return
+        it = self.canvas.text_items.get(bid)
+        if it is not None and b.vectorise:
+            it.rebuild()
+        else:
+            self.canvas.refresh_block(b)
+        if self.view_mode == "final":
+            self._final_timer.start()
+
+    def _structure_changed(self):
+        self.canvas.rebuild_items()
+        self.text_panel.rebuild_list()
+        self._preview_cache.pop("final", None)
+        if self.view_mode == "final":
+            self._final_timer.start()
+
+    def _add_text(self, x, y):
+        b = self.project.new_block(x, y)
+        self.canvas.rebuild_items()
+        self.text_panel.rebuild_list(b.id)
+        self.canvas.select_block(b.id)
+        self.set_tool("select")
+        self.text_panel.ed_text.setFocus()
+        self.text_panel.ed_text.selectAll()
+
+    def _erase_rect(self, x, y, w, h):
+        self.project.erase_regions.append(EraseRegion(x, y, w, h))
+        self._structure_changed()
+
+    def _erase_deleted(self, region):
+        if region in self.project.erase_regions:
+            self.project.erase_regions.remove(region)
+        self._structure_changed()
+
+    def suggest_fonts(self, bid):
+        p = self.project
+        b = self.text_panel.block(bid)
+        if not p or b is None or b.user_added:
+            self.statusBar().showMessage("Font suggestions need a detected text line")
+            return
+        from ..text.fontmatch import suggest
+
+        def job(progress):
+            return suggest(p.src, b, 12, lambda f: progress("Comparing fonts…", f), lambda: self.task.stopping)
+        self._run(job, self.text_panel.show_suggestions, "Comparing fonts…")
+
+    # ================================================================ outputs
+    def _targets_changed(self):
+        self.targets = self.out_panel.targets
+        if self.project:
+            self.project.targets = self.targets
+            self.text_panel.set_units(*self._units())
+            self._update_eta()
+        self._save_settings()
+
+    def export(self):
+        p = self.project
+        if not p:
+            return
+        if not any(t.enabled for t in self.targets):
+            QMessageBox.information(self, APP_NAME, "Check at least one output in the Outputs tab.")
+            self.right_tabs.setCurrentIndex(1)
+            return
+        out = self.out_panel.out_dir.text() or str(p.source_path.parent / "tfe_output")
+        self._save_settings()
+        need_ai = p.master is None
+        if need_ai and QMessageBox.question(
+                self, APP_NAME, "The image has not been AI-enhanced yet. Enhance now before exporting?\n"
+                                "(No = export using plain resampling)") == QMessageBox.Yes:
+            pass
+        else:
+            need_ai = False
+
+        def job(progress):
+            if need_ai:
+                p.run_enhance(lambda m, f: progress(m, 0.7 * f), lambda: self.task.stopping)
+                return p.export(Path(out), lambda m, f: progress(m, 0.7 + 0.3 * f), lambda: self.task.stopping)
+            return p.export(Path(out), progress, lambda: self.task.stopping)
 
         def done(rep):
-            self._rendered(proj.render(), then=lambda: None)
             self.report.setPlainText(format_report(rep))
             self.tabs.setCurrentIndex(2)
-            QMessageBox.information(self, APP_NAME, "Exported:\n" + rep["outputs"]["pdf"] + "\n"
-                                    + rep["outputs"]["png"])
+            self._preview_cache.pop("ai", None)
+            if self.view_mode == "original" and p.master is not None:
+                self.mode.setCurrentIndex(1)
+                self.view_mode = "ai"
+            self._set_bg()
+            warn = "\n".join(rep.get("warnings", []))
+            QMessageBox.information(self, APP_NAME, f"Exported {len(rep['outputs'])} files to\n{out}"
+                                    + (f"\n\n{warn}" if warn else ""))
         self._run(job, done, "Exporting…")
 
-    def batch(self, folder: str | None = None) -> None:
-        self.settings = self.panel.store(self.settings)
-        self._save_settings()
-        dlg = BatchDialog(Settings.from_dict(self.settings.to_dict()), self)
-        if folder:
-            dlg.inp.setText(folder)
-            dlg.out.setText(str(Path(folder) / "tfe_output"))
-        dlg.exec()
+    # ================================================================ compare
+    def _tab_changed(self, i):
+        if i == 1:
+            self.update_compare()
 
-    def about(self) -> None:
-        QMessageBox.about(self, APP_NAME,
-                          f"<b>{APP_NAME}</b> {__version__}<br>"
-                          "A1 posters from AI images: Real-ESRGAN upscaling, Apple Vision OCR, "
-                          "vector text, 300 dpi export.<br>Runs fully offline.<br><br>"
-                          f"OCR: {backend_name()}<br>Real-ESRGAN: {find_realesrgan() or 'not found'}")
+    def update_compare(self):
+        import cv2
+        p = self.project
+        if not p:
+            return
+        mode = self.cmp_mode.currentData()
+        if p.master is None:
+            self.compare.clear()
+            self.statusBar().showMessage("Run ✨ Enhance to compare")
+            return
+        cache = getattr(self, "_compare_cache", None)
+        if cache is None or cache.get("_id") != id(p.master):
+            cache = self._compare_cache = {"_id": id(p.master)}
+        ai, k = downscale(p.master, COMPARE_CAP)
+        h, w = ai.shape[:2]
+        if "orig" not in cache:
+            cache["orig"] = cv2.resize(p.src, (w, h), interpolation=cv2.INTER_CUBIC)
+        if "ai" not in cache:
+            cache["ai"] = adj.apply(ai, p.enhance.adjust, w / p.size[0])
+        if mode == "orig-ai":
+            self.compare.set_images(cache["orig"], cache["ai"], ("Original (bicubic)", "AI enhanced"))
+            return
+        key = ("final", json.dumps([b.to_dict() for b in p.blocks], default=str),
+               json.dumps(p.enhance.adjust.to_dict()), len(p.erase_regions))
+        if cache.get("final_key") == key:
+            a, b = (cache["orig"], cache["final"]) if mode == "orig-final" else (cache["ai"], cache["final"])
+            self.compare.set_images(a, b, ("Original (bicubic)" if mode == "orig-final" else "AI enhanced", "Final"))
+            return
+        t = original_target(max(w, h), ["png"])
 
-    def closeEvent(self, ev) -> None:
-        self.settings = self.panel.store(self.settings)
+        def job(progress):
+            return p.render_target(t, progress, lambda: self.task.stopping).flat
+
+        def done(flat):
+            cache["final"], cache["final_key"] = flat, key
+            self.update_compare()
+        self._run(job, done, "Rendering final for comparison…")
+
+    # ================================================================ misc
+    def save_edits(self):
+        p = self.project
+        if not p:
+            return
+        out = Path(self.out_panel.out_dir.text() or p.source_path.parent / "tfe_output")
+        out.mkdir(parents=True, exist_ok=True)
+        path = out / f"{p.source_path.stem}{PROJECT_SUFFIX}"
+        p.save(path)
+        self.statusBar().showMessage(f"Saved edits to {path}")
+
+    def batch(self, folder: str = ""):
+        BatchDialog(self, folder).exec()
+
+    def models(self):
+        ModelsDialog(self).exec()
+        self.enh_panel.refresh_models()
+        self._update_eta()
+
+    def about(self):
+        import platform
+        from ..enhance.torch_sr import torch_available, device_name
+        dev = device_name() if torch_available() else "no PyTorch"
+        QMessageBox.about(self, APP_NAME, f"<b>{APP_NAME}</b> {__version__}<br>"
+                          "AI enhancement up to 16× (DRCT-L, HAT-L, DAT2…), LaMa text removal, "
+                          "editable vector text, print & social exports. Runs offline.<br><br>"
+                          f"Compute: {dev} · OCR: {backend_name()} · {platform.platform()}")
+
+    def closeEvent(self, ev):
         self._save_settings()
         if self.task and self.task.isRunning():
-            self.task.wait()
+            self.task.stop()
+            self.task.wait(5000)
         super().closeEvent(ev)

@@ -14,6 +14,9 @@ import sys
 from dataclasses import dataclass, asdict
 from functools import lru_cache
 from pathlib import Path
+import logging
+
+logging.getLogger("fontTools").setLevel(logging.ERROR)
 
 FONT_EXTS = {".ttf", ".otf", ".ttc", ".otc"}
 CACHE = Path.home() / ".tfe-poster-maker" / "fonts.json"

@@ -1,61 +1,110 @@
-"""Remove raster text from the 300 dpi canvas with OpenCV inpainting.
+"""Text removal at source resolution: LaMa (big-lama) when installed, else OpenCV.
 
-Masks come from the source-resolution analysis and are mapped onto the canvas.
-Each box is inpainted in a local crop (capped resolution) so A1-sized canvases
-stay fast; only masked pixels are replaced, with a feathered edge.
+Removing text on the *source* image and then enhancing the cleaned region with
+the same SR model keeps the texture consistent with the rest of the picture.
 """
 from __future__ import annotations
+
+from functools import lru_cache
 
 import cv2
 import numpy as np
 
-MAX_WORK_SIDE = 1600
+from .enhance.zoo import model_path
+
+MAX_LAMA_SIDE = 1024
 
 
-def inpaint_region(canvas: np.ndarray, src_mask: np.ndarray, src_x: int, src_y: int,
-                   layout, method: str = "telea", grow: float = 1.0) -> None:
-    """In-place: inpaint one mask (given at source resolution at src_x/src_y)."""
-    s = layout.scale
-    mh, mw = src_mask.shape
-    # canvas rectangle of the mask crop
-    X0, Y0 = layout.src_to_canvas(src_x, src_y)
-    X1, Y1 = layout.src_to_canvas(src_x + mw, src_y + mh)
-    X0, Y0, X1, Y1 = int(np.floor(X0)), int(np.floor(Y0)), int(np.ceil(X1)), int(np.ceil(Y1))
-    W, H = X1 - X0, Y1 - Y0
-    if W < 2 or H < 2:
-        return
-    mask = cv2.resize(src_mask, (W, H), interpolation=cv2.INTER_LINEAR)
-    mask = (mask > 127).astype(np.uint8) * 255
-    g = int(round(max(1.0, s * 0.75) * grow))
-    if g > 0:
-        mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * g + 1, 2 * g + 1)))
+def lama_available() -> bool:
+    if model_path("lama") is None:
+        return False
+    try:
+        import torch  # noqa: F401
+        return True
+    except Exception:
+        return False
 
-    # Context around the mask so the inpainter sees real background.
-    ctx = int(max(8, 0.15 * max(W, H) if max(W, H) < 400 else 0.05 * max(W, H)))
-    cx0, cy0 = max(0, X0 - ctx), max(0, Y0 - ctx)
-    cx1, cy1 = min(canvas.shape[1], X1 + ctx), min(canvas.shape[0], Y1 + ctx)
-    region = canvas[cy0:cy1, cx0:cx1]
-    full_mask = np.zeros(region.shape[:2], np.uint8)
-    mx0, my0 = X0 - cx0, Y0 - cy0
-    sub = full_mask[max(0, my0):my0 + H, max(0, mx0):mx0 + W]
-    sub[:] = mask[max(0, -my0):max(0, -my0) + sub.shape[0], max(0, -mx0):max(0, -mx0) + sub.shape[1]]
-    if not full_mask.any():
-        return
 
-    rh, rw = region.shape[:2]
-    f = min(1.0, MAX_WORK_SIDE / max(rh, rw))
-    flag = cv2.INPAINT_NS if method == "ns" else cv2.INPAINT_TELEA
-    if f < 1.0:
-        sw, sh = max(2, int(rw * f)), max(2, int(rh * f))
-        small = cv2.resize(region, (sw, sh), interpolation=cv2.INTER_AREA)
-        smask = (cv2.resize(full_mask, (sw, sh), interpolation=cv2.INTER_AREA) > 0).astype(np.uint8) * 255
-        filled = cv2.inpaint(small, smask, 5, flag)
-        filled = cv2.resize(filled, (rw, rh), interpolation=cv2.INTER_CUBIC)
-    else:
-        filled = cv2.inpaint(region, full_mask, max(3, int(round(3 * s))), flag)
+@lru_cache(maxsize=1)
+def _lama(device: str):
+    import torch
+    m = torch.jit.load(str(model_path("lama")), map_location="cpu")
+    m.eval()
+    try:
+        m = m.to(device)
+    except Exception:
+        device = "cpu"
+    return m, device
 
-    feather = max(1, int(round(s)))
-    alpha = cv2.GaussianBlur(full_mask.astype(np.float32) / 255.0, (0, 0), feather)
-    alpha = np.maximum(alpha, full_mask.astype(np.float32) / 255.0)[..., None]
-    out = region.astype(np.float32) * (1 - alpha) + filled.astype(np.float32) * alpha
-    region[:] = np.clip(out + 0.5, 0, 255).astype(np.uint8)
+
+def _run_lama(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    import torch
+    from .enhance.torch_sr import device_name, _lock
+    h, w = img.shape[:2]
+    ph, pw = (-h) % 8, (-w) % 8
+    im = np.pad(img, ((0, ph), (0, pw), (0, 0)), mode="reflect") if (ph or pw) else img
+    mk = np.pad(mask, ((0, ph), (0, pw)), mode="constant") if (ph or pw) else mask
+    for dev in dict.fromkeys([device_name(), "cpu"]):
+        try:
+            model, dev = _lama(dev)
+            t = torch.from_numpy(im).permute(2, 0, 1)[None].float().to(dev) / 255.0
+            m = torch.from_numpy((mk > 127).astype(np.float32))[None, None].to(dev)
+            t = t * (1 - m)                     # the network must not see the text it removes
+            with _lock, torch.inference_mode():
+                out = model(t, m)
+            res = out[0].permute(1, 2, 0).float().cpu().numpy()
+            if res.max() <= 1.5:
+                res = res * 255.0
+            return np.clip(res, 0, 255).astype(np.uint8)[:h, :w]
+        except Exception:
+            continue
+    raise RuntimeError("LaMa inpainting failed")
+
+
+def _clusters(mask: np.ndarray, gap: int) -> list[tuple[int, int, int, int]]:
+    """Bounding boxes of mask regions, merging ones closer than ``gap``."""
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * gap + 1, 2 * gap + 1))
+    merged = cv2.dilate((mask > 0).astype(np.uint8), k)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(merged)
+    boxes = []
+    for i in range(1, n):
+        x, y, w, h, _ = stats[i]
+        boxes.append((x, y, x + w, y + h))
+    return boxes
+
+
+def inpaint(img: np.ndarray, mask: np.ndarray, method: str = "auto") -> np.ndarray:
+    """Return a copy of ``img`` with ``mask`` (uint8, >0 = remove) filled."""
+    if not mask.any():
+        return img
+    use_lama = method in ("auto", "lama") and lama_available()
+    out = img.copy()
+    H, W = img.shape[:2]
+    for x0, y0, x1, y1 in _clusters(mask, 8):
+        bw, bh = x1 - x0, y1 - y0
+        ctx = int(max(24, 0.6 * max(bw, bh) if use_lama else 0.25 * max(bw, bh)))
+        cx0, cy0, cx1, cy1 = max(0, x0 - ctx), max(0, y0 - ctx), min(W, x1 + ctx), min(H, y1 + ctx)
+        crop, cm = out[cy0:cy1, cx0:cx1], mask[cy0:cy1, cx0:cx1]
+        if use_lama:
+            k = min(1.0, MAX_LAMA_SIDE / max(crop.shape[:2]))
+            if k < 1:
+                sw, sh = int(crop.shape[1] * k), int(crop.shape[0] * k)
+                small = cv2.resize(crop, (sw, sh), interpolation=cv2.INTER_AREA)
+                smask = (cv2.resize(cm, (sw, sh), interpolation=cv2.INTER_AREA) > 0).astype(np.uint8) * 255
+                filled = cv2.resize(_run_lama(small, smask), (crop.shape[1], crop.shape[0]),
+                                    interpolation=cv2.INTER_CUBIC)
+            else:
+                filled = _run_lama(crop, cm)
+        else:
+            flag = cv2.INPAINT_NS if method == "ns" else cv2.INPAINT_TELEA
+            filled = cv2.inpaint(crop, (cm > 0).astype(np.uint8) * 255, 5, flag)
+        a = cv2.GaussianBlur((cm > 0).astype(np.float32), (0, 0), 1.0)
+        a = np.maximum(a, (cm > 0).astype(np.float32))[..., None]
+        out[cy0:cy1, cx0:cx1] = np.clip(crop * (1 - a) + filled * a + 0.5, 0, 255).astype(np.uint8)
+    return out
+
+
+def method_name(method: str = "auto") -> str:
+    if method in ("auto", "lama") and lama_available():
+        return "LaMa"
+    return "OpenCV Navier-Stokes" if method == "ns" else "OpenCV Telea"

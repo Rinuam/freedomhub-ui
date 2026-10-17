@@ -1,162 +1,201 @@
-# TFE Poster Maker
+# TFE Poster Maker 2
 
-Turn AI-generated images (e.g. ChatGPT 1024 × 1536 PNG/JPG) into print-ready **A1 posters**:
-a 300 dpi raster background, upscaled with Real-ESRGAN, with the image's text replaced
-by **real vector text** in the PDF. A native macOS app (Python + PySide6) for Apple
-Silicon. It runs **fully offline**.
+Turn AI-generated images (ChatGPT, Midjourney, Firefly…) into **print-ready posters
+(A0–A6, US, custom)** and **social-media images**. The app:
+
+* enhances the image with state-of-the-art AI super-resolution, **up to 16×**;
+* replaces the image's text with **real, editable vector text**;
+* exports **PDF** (vector text over a high-resolution background) plus **PNG, JPEG, TIFF
+  and WebP**.
+
+It is a native macOS app for Apple Silicon (PySide6 + PyTorch on the Apple GPU), and
+everything runs **offline** on your Mac.
 
 ```
-image ──► fit to A1 (no crop/stretch) + margin in the image's edge colour
-      ──► Real-ESRGAN 4x (ncnn/Metal via MoltenVK) ──► resample to exactly 300 dpi
-      ──► Apple Vision OCR: text boxes, text, size, colour, weight
-      ──► Review: edit text · pick font · size · colour · vectorise on/off per box
-      ──► vectorised boxes: OpenCV inpaint of the raster text + vector text placed on top
-      ──► Export: A1 PDF (embedded, subsetted fonts) + flattened 300 dpi PNG + dpi report
+image ─► OCR (Apple Vision) ─► editable text blocks ─┐
+      └► AI enhance ×2…×16 (DRCT-L / HAT-L / DAT2 …) │  disk-cached
+             + optional JPEG clean-up, face restore  │
+                                                     ▼
+  LaMa removes the original text on the source ─► cleaned areas re-enhanced with the
+  same model (seamless) ─► per output: resample · tone/detail · soft shadows · vector text
+                                                     ▼
+       A1/A2/A4… PDF (searchable, vector)  ·  Instagram/LinkedIn/YouTube/4K PNG/JPEG/WebP
 ```
 
-## Install (pre-built app)
+## What's new in 2.0
 
-1. Copy **TFE Poster Maker.app** to `/Applications`.
-2. The first time, right-click → **Open** (the app is ad-hoc signed, not notarised).
+| Area | v1 | v2 |
+|---|---|---|
+| Enhancement | Real-ESRGAN 4× | **DRCT-L, HAT-L, DAT2, ATD, SwinIR-L, RealPLKSR, RCAN, ESRGAN**, up to **16×** (multi-pass), model blending, ×8 TTA, auto model choice |
+| Restoration | – | FBCNN JPEG clean-up, SCUNet denoise, GFPGAN / CodeFormer faces |
+| Tone & detail | – | exposure, contrast, highlights, shadows, saturation, vibrance, warmth, tint, clarity, sharpen, denoise, grain (live preview) |
+| Text removal | OpenCV | **LaMa** (big-lama), then the region is re-enhanced and tone-matched |
+| Text | font, size, colour | HarfBuzz shaping (kerning, ligatures), **multi-line**, tracking, line height, alignment, case, outline, hard and soft shadow, opacity, rotation, synthetic bold/italic, drag-to-move, add or delete text, **font matching** |
+| Outputs | A1 PDF + PNG | A0–A6, B1/B2, US sizes, posters, custom mm at 150–600 dpi with bleed; 14 social presets plus custom px; original aspect up to 16384 px; **PDF / PNG / JPEG / TIFF / WebP**, sRGB-tagged |
 
-## Build the .app yourself (one time, needs internet only for this step)
+## Install
 
-Requirements: macOS 12+ on Apple Silicon and Python 3.11–3.13 (python.org or Homebrew).
+### Option A: build the app on your Mac (recommended, one time)
+
+Requirements: Apple Silicon Mac, macOS 13+, Python 3.11–3.13 (from python.org or
+`brew install python@3.12`), about 8 GB of free disk.
 
 ```bash
-cd tfe-poster-maker
-scripts/build_app.sh            # -> dist/TFE Poster Maker.app
-scripts/build_app.sh --dmg      # also builds dist/TFE-Poster-Maker.dmg
+git clone -b claude/install-ui-ux-pro-max-k9vxvj https://github.com/rinuam/freedomhub-ui.git
+cd freedomhub-ui/tfe-poster-maker
+scripts/build_app.sh --dmg         # ≈15–30 min; downloads PyTorch + ~1.2 GB of models once
+open dist                          # drag "TFE Poster Maker.app" to Applications
 ```
 
-The script creates `.venv`, installs the requirements (PySide6, OpenCV, PyMuPDF, pyobjc
-Vision, …), downloads the Real-ESRGAN ncnn macOS build into `vendor/realesrgan`
-(`scripts/fetch_realesrgan.sh`), draws the icon, and runs PyInstaller with
-`packaging/tfe_poster.spec`. It then ad-hoc codesigns the bundle and runs
-`TFE Poster Maker doctor` as a self-check. The bundle contains everything; after the
-build, nothing touches the network.
+* `--no-models` builds a smaller app; you then download models inside the app (**Models…**).
+* `--all-models` bundles every model in the catalogue (~2.5 GB).
+* The first launch needs a right-click → **Open**, because the app is ad-hoc signed and not
+  notarised.
+* The build ends with a self-check (`doctor`). It should report
+  `PyTorch … on mps` and `OCR: Apple Vision`.
 
-### Run from source (no bundle)
+### Option B: run from source
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-mac.txt
-scripts/fetch_realesrgan.sh
-python -m tfe_poster            # GUI
-python -m tfe_poster doctor     # shows OCR backend, Real-ESRGAN, fonts
+scripts/fetch_models.sh            # recommended models into vendor/models
+python -m tfe_poster               # GUI
+python -m tfe_poster doctor
 ```
 
 ## Using the app
 
-1. **Open image…** (⌘O), or drop a PNG/JPG on the window or the Dock icon. OCR runs
-   first (about 1 s), then the image is upscaled and placed on the sheet. The progress
-   bar is at the bottom right.
-2. **Settings** (left panel): orientation (auto / portrait / landscape), margin in mm,
-   Real-ESRGAN model, inpainting method, PDF background encoding, and which boxes
-   start out vectorised. Click **Apply & re-process** after changing the geometry or
-   the upscaler; your box edits are kept.
-3. **Review** tab. Every detected text line has a box: green = vectorise, orange =
-   keep as raster. Click a box or a table row, then edit:
-   * **Text**: fix OCR errors or rewrite the text.
-   * **Font**: any installed font (type to search; `.ttc` faces are supported). Use
-     **Use this font for all vectorised boxes** for consistency.
-   * **Size**: *Auto-fit* matches the detected ink extents exactly. Untick it to set
-     points yourself.
-   * **Colour**: sampled from the stroke cores; click to change.
-   * **Anchor**: when the new text is a different length, keep it centred, or pinned
-     to the left or right edge of the original text.
-   * **Inpaint grow**: enlarge the removal mask when glow or shadow remains.
-   * ⚠ in the size column means the chosen font lacks some glyphs (e.g. `€`, `ñ`).
-4. **Render preview** (⌘R) runs the inpainting and vector text at full 300 dpi.
-   Tick **Show rendered result** to see it on the review canvas.
-5. **Before / After** tab: a split view at real output resolution. Mouse wheel = zoom,
-   drag = pan, drag the white handle = move the split, double-click = 100 %. Modes:
-   plain bicubic vs final, upscaled raster vs final, bicubic vs upscaled.
-6. **Export PDF + PNG…** (⌘E) writes, into the folder you choose:
+The window has three areas: **Enhance** on the left, the **Editor / Before-After / Report**
+tabs in the centre, and **Text** and **Outputs** on the right.
 
-| File | Content |
-|---|---|
-| `<name>_A1.pdf` | A1 page (594 × 841 mm), 300 dpi background (JPEG q95 4:4:4 or lossless), vector text with embedded subset fonts. The text is selectable and searchable. |
-| `<name>_A1_300dpi.png` | The same page flattened: 7016 × 9933 px with the 300 dpi tag. The text layer is rendered by the PDF engine, so it matches the PDF exactly. |
-| `<name>_report.txt / .json` | Resolution report (below). |
-| `<name>.tfe.json` | Your review edits. Re-opening the image, or a batch run, offers to reuse them. |
+1. **Open** an image (⌘O), or drop it on the window. Text is detected immediately.
+2. **Text** tab: every detected line is listed. Ticked lines become vector text.
+   * Click a line, or click it on the canvas, to edit it. You can change the text
+     (multi-line), family and style, size (shown in **pt on your print size**), tracking,
+     line height, alignment, case, kerning and ligatures, extra bold and slant, fill colour
+     and opacity, outline, shadow (offset and softness), position and rotation.
+   * **Fit to original** sizes the text exactly over the detected lettering.
+     **Suggest matching fonts…** compares the original lettering against every installed
+     font and ranks them.
+   * **＋ Text** adds new text (click where it should go). **Merge** joins selected lines
+     into one paragraph. **Duplicate** and **Delete** do what they say. **Apply this style
+     to…** copies a style to the other blocks.
+   * Drag text on the canvas to move it; the arrow keys nudge it (Shift = 10 px).
+   * **⌫ Erase area**: drag a rectangle to remove anything (logos, artefacts, watermarks).
+   * A detected line can also be erased without replacing it: tick *Erase original* and
+     untick *Vector text*.
+3. **Enhance** panel:
+   * **Preset**:
+     * **Auto** analyses the image. Clean PNGs get **DRCT-L**; JPEG/WebP-blocky images
+       get **FBCNN clean-up + HAT-L**.
+     * The other presets are DRCT-L, HAT-L, DAT2, DRCT-L + HAT-L detail blend,
+       AnimeSharp and Fast.
+   * **Enlarge**: *Auto* picks the smallest power of two that covers your largest output
+     (e.g. A1 @ 300 dpi from 1024×1536 → 8×). You can also choose 2, 4, 8 or 16×. Every
+     step is an AI pass, never plain interpolation.
+   * **Detail model + blend** mixes a second model into each tile (e.g. 35 % HAT-L for
+     micro-texture). **TTA ×8** averages 8 flipped/rotated runs: slightly cleaner, 8× slower.
+   * **Pre-clean**: FBCNN (JPEG artefacts) or SCUNet (noise), at source resolution.
+     **Faces**: GFPGAN 1.4 (or CodeFormer; see licences).
+   * **Tone and detail** sliders update the preview live (double-click a slider to reset).
+   * **Test on visible area** runs the current settings on a 256 px crop of what you see,
+     for quick model comparison.
+   * **✨ Enhance with AI** (⌘R) shows a rough time estimate first. Results are cached, so
+     re-opening the image or changing text never repeats the AI run.
+4. **Show:** switches the canvas between *Original*, *AI enhanced* and *Final background*
+   (text removed; this is what the PDF uses under the vector text).
+5. **Before / After** tab: a zoomable split view (up to 200 %) of original vs AI vs final.
+6. **Outputs** tab: tick the outputs you want, or **＋ Add output**. For each one you can
+   set:
+   * **Print**: paper, orientation, dpi (150–600), margin and bleed (the PDF trim box is set).
+   * **Social / screen**: Instagram 1:1, 4:5 and story, Facebook, LinkedIn, X, YouTube,
+     Pinterest, Full HD, 4K, 8K or custom pixels.
+   * **Framing**: *Fit* (colour margins: edge-sampled, white, black or `#rrggbb`),
+     *Extend* (blurred-image background, ideal for social sizes) or *Fill* (crop, with a
+     focus point).
+   * **Formats**: PDF, PNG, JPEG, TIFF, WebP, plus quality and PDF background encoding.
+   * **⬇ Export** (⌘E) writes every checked output, a quality report, and
+     `<name>.tfe.json` (your edits, re-loadable).
+7. **Batch…** (⌘B) processes a folder with the current Enhance settings and the checked
+   outputs. Saved edits are reused.
 
-### The dpi report
+## Models
 
-* **Native ppi**: source pixels per printed inch. A 1024 px wide image across ~541 mm
-  is ≈ 48 ppi.
-* **Upscaled ppi**: after Real-ESRGAN 4x (≈ 192 ppi for that example).
-* **Effective ppi** = min(upscaled ppi, output dpi). Detail above native is
-  *reconstructed* by the network, not captured. The report states this.
-* **Minimum viewing distance** at which pixels can no longer be resolved, using
-  1 arc-minute acuity (d ≈ 3438 / ppi inches). Example: 48 ppi → 1.8 m,
-  192 ppi → 0.45 m.
-* Vector text is resolution-independent and is listed per box with font and size.
+Open **Models…** to see every model with its size, speed, licence and status. You can
+download (SHA-256 verified), delete, or **import any spandrel-compatible model** (most of
+openmodeldb.info).
 
-## Batch mode
+| Model | Best for | Speed | Licence |
+|---|---|---|---|
+| DRCT-L Nomos2 HQ | clean AI art: sharpest, no invented texture | slow | CC-BY-4.0 |
+| HAT-L Nomos8k OTF | photos, blur, noise, compression; generates detail | slowest | CC-BY-4.0 |
+| DAT2 RealWebPhoto v4 | JPEG/WebP downloads, screenshots | medium | CC-BY-4.0 |
+| ATD Nomos2 HQ | alternative to DRCT-L | slow | CC-BY-4.0 |
+| DAT Nomos8k, SwinIR-L | photo GAN alternatives | medium | CC-BY-4.0 / Apache-2.0 |
+| RealPLKSR Nomos2 / WebPhoto | fast, very good drafts and batches | fast | CC-BY-4.0 |
+| AnimeSharp V4 RCAN (2×) | anime and flat colour | medium | **CC-BY-NC-SA** |
+| Real-ESRGAN x4plus / anime / x2 / general v3 | classic | fast | BSD-3 |
+| FBCNN, SCUNet | JPEG clean-up, denoise | medium | Apache-2.0 |
+| GFPGAN 1.4 | faces | – | Apache-2.0 |
+| CodeFormer | faces | – | **non-commercial** |
+| LaMa | text removal | – | Apache-2.0 |
 
-**File → Batch folder…** (⌘B), or drop a folder on the window. Every PNG/JPG in the
-folder is processed with the current settings and no review step. Vectorised boxes
-are chosen as *confident* (OCR confidence ≥ 0.6), *all*, or *none*, and any saved
-`.tfe.json` edits are reused. A `batch_summary.csv` is written. From the terminal:
+⚠ For company deliverables, avoid the **non-commercial** models (CodeFormer, AnimeSharp
+V4). The recommended bundle contains only commercially usable models.
+
+**Speed** (Apple GPU, 1024×1536 source, very rough): RealPLKSR 4× ≈ 10–20 s,
+DAT2 ≈ 1–2 min, DRCT-L / HAT-L ≈ 3–8 min. A 16× second pass takes about 16× longer.
+Use *Test on visible area* to judge a model before a long run.
+
+## Command line
 
 ```bash
-"/Applications/TFE Poster Maker.app/Contents/MacOS/TFE Poster Maker" batch ~/Posters -o ~/Posters/A1
-"/Applications/TFE Poster Maker.app/Contents/MacOS/TFE Poster Maker" process image.png --vectorise all --font "Helvetica Neue Bold"
+APP="/Applications/TFE Poster Maker.app/Contents/MacOS/TFE Poster Maker"
+"$APP" doctor
+"$APP" models                                   # list; --download default|all|<ids>
+"$APP" process poster.png --print A1 --print A3 --social "Instagram portrait 4:5" \
+       --preset "Best · real" --factor 8 --faces gfpgan-1.4 --sharpen 0.3 -o out/
+"$APP" batch ~/Posters --print A2 --social "LinkedIn post" --vectorise all --font "Helvetica Neue Bold"
 ```
 
-Options: `--orientation`, `--margin MM`, `--no-upscale`, `--model`, `--tile N` (lower
-it if the GPU runs out of memory), `--vectorise auto|all|none`, `--font NAME`,
-`--lossless`.
+## Quality notes
 
-## Upscaling models
+* The text is real vector outlines, razor sharp at any size, plus an invisible text layer
+  so the PDF stays searchable. The outlines come from the same engine as the editor, so
+  what you see is what prints.
+* The report gives, for every output, the *native ppi* (real source pixels), the
+  *effective ppi* after AI, and the viewing distance beyond which pixels can't be
+  resolved. AI adds plausible detail; it cannot recover detail that never existed.
+* Text removal runs on the source image (where LaMa works best). The cleaned area is then
+  upscaled with the same model and tone-matched to its surroundings, so it is invisible
+  after enlargement.
 
-| Model | Use |
-|---|---|
-| `realesr-animevideov3` (default) | Conservative illustration/anime model; least hallucination on flat colour, line art and typography. |
-| `realesrgan-x4plus-anime` | Stronger anime model; sharper but can flatten texture. |
-| `realesrgan-x4plus` | General/photographic images. |
+## Troubleshooting
 
-If the source already reaches the target dpi, upscaling is skipped. If the binary is
-missing, the app falls back to Lanczos and says so in the report.
-
-## How the text replacement works
-
-* **Detection**: `VNRecognizeTextRequest` (accurate level, language correction; en, es,
-  ca where supported), on-device.
-* **Colour / mask**: a robust planar fit (a + bx + cy, with iterative outlier
-  rejection) models the local background, so text on gradients is separated cleanly.
-  An Otsu threshold on the colour distance gives the stroke pixels. The text colour
-  is the median of the stroke cores; weight comes from the stroke-width/height ratio.
-* **Inpainting**: OpenCV Telea or Navier-Stokes on a local crop at capped
-  resolution, composited only inside the (grown, feathered) mask.
-* **Placement**: the text's ink box is measured by rendering it with MuPDF, the same
-  engine that writes the PDF. Size and position are then solved so the vector ink
-  matches the detected ink. On test images, auto size is within 1 % of the true size
-  and position within 2 source pixels.
+* **"Model not installed"**: open **Models…** and click *Download recommended set*.
+* **Out of GPU memory** on huge factors: lower *Tile size* (e.g. 256) or use FP16.
+* **OCR missed some text**: add it with **＋ Text**, and remove the original with
+  **⌫ Erase area**.
+* **Glow around replaced text**: raise *Erase grow* for that block, or drag an erase area
+  over the glow.
+* **Fonts**: install fonts into `~/Library/Fonts` and restart the app.
 
 ## Development
 
 ```bash
 pip install -r requirements.txt pytest
-pytest -q                                   # 17 tests (layout, PDF/PNG, inpaint, alignment, EXIF, upscaler)
-python scripts/make_samples.py samples      # synthetic test posters
+pytest -q                                      # model tests auto-skip if models are absent
+TFE_MODELS=vendor/models pytest -q             # include AI-model tests
 QT_QPA_PLATFORM=offscreen python scripts/gui_smoke.py samples/portrait_poster.png /tmp/shots
 ```
 
-Code layout: `tfe_poster/` holds `layout.py` (A1 fit, margin colour), `upscale.py`
-(Real-ESRGAN wrapper), `ocr.py` (Vision; Tesseract only for testing off-Mac),
-`textstyle.py`, `inpaint.py`, `fonts.py`, `project.py` (pipeline, PDF/PNG export,
-report), `batch.py`, `cli.py`, and `gui/` (main window, review, compare).
+Layout of `tfe_poster/`:
 
-## Troubleshooting
-
-* **"Real-ESRGAN not found"**: run `scripts/fetch_realesrgan.sh` before building, or
-  set `TFE_REALESRGAN=/path/to/realesrgan-ncnn-vulkan`.
-* **Real-ESRGAN fails with a memory error**: use `--tile 256` (or 128).
-* **OCR finds nothing**: check `doctor` reports *Apple Vision*. Very stylised lettering
-  may not be recognised; that text then simply stays raster.
-* **Text still faintly visible after vectorising**: raise *Inpaint grow* for that box
-  (glows and drop shadows extend beyond the strokes).
-* **Fonts**: the app scans `/System/Library/Fonts`, `/Library/Fonts` and
-  `~/Library/Fonts`. Install a font there and restart the app to use it.
+* `enhance/`: model catalogue, spandrel/MPS tiled inference, the enhancement pipeline,
+  faces, tone/detail adjustments.
+* `text/`: block model, HarfBuzz + fontTools engine, PDF/Qt renderers, font matching.
+* `formats.py`: paper, social and placement geometry.
+* `project.py`: OCR → enhance → clean → render → export.
+* `inpaint.py`: LaMa/OpenCV text removal.
+* `gui/`: the app.
